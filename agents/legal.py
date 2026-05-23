@@ -8,8 +8,6 @@ import logging
 import os
 import time
 
-import anthropic
-
 from agents.schemas import AgentMessage, LegalPayload
 
 logger = logging.getLogger(__name__)
@@ -61,6 +59,20 @@ def run_legal_agent(
     if DEMO_MODE or not os.getenv("ANTHROPIC_API_KEY"):
         logger.warning("[legal] DEMO_MODE or no ANTHROPIC_API_KEY — returning mock clearance")
         time.sleep(0.6)
+        payload = LegalPayload(
+            product_name=product_name,
+            category=category,
+            cleared=DEMO_LEGAL_RESPONSE["cleared"],
+            flags=DEMO_LEGAL_RESPONSE["flags"],
+            recommendation=DEMO_LEGAL_RESPONSE["recommendation"],
+            risk_level=DEMO_LEGAL_RESPONSE["risk_level"],
+        )
+        return AgentMessage.success("legal", "ceo", "legal_cleared", payload.__dict__, business_id)
+
+    try:
+        import anthropic
+    except ImportError:
+        logger.warning("[legal] anthropic package not installed — returning mock clearance")
         payload = LegalPayload(
             product_name=product_name,
             category=category,

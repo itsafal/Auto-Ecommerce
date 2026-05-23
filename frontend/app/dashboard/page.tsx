@@ -9,7 +9,17 @@ import { getCurrentUser, getRun, getRunEvents, triggerAgentRun, useMockMode } fr
 import { type AgentEvent, type LaunchRun, mockEvents, mockRun, mockScore } from "@/lib/mock-data";
 import styles from "./page.module.css";
 
-const demoProducts = ["Magnetic Phone Mount", "Ergo Keyboard", "Portable Blender"];
+const demoProducts = [
+  "Magnetic Phone Mount",
+  "Portable Power Station",
+  "Red Light Therapy Mask",
+  "Mini Portable Projector",
+  "Smart Ring Fitness Tracker",
+  "Portable Ice Bath",
+  "Smart Desk Lamp",
+  "Ergo Keyboard",
+  "Portable Blender"
+];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -25,7 +35,11 @@ export default function DashboardPage() {
     if (!run) {
       return mockScore;
     }
-    return { ...mockScore, launch_score: run.launch_score, decision: run.decision };
+    return {
+      ...mockScore,
+      launch_score: run.launch_score ?? mockScore.launch_score,
+      decision: run.decision ?? mockScore.decision
+    };
   }, [run]);
 
   useEffect(() => {
@@ -52,15 +66,10 @@ export default function DashboardPage() {
     setIsTriggering(true);
     setError(null);
     setEvents([]);
+    setRun(null);
     try {
       const response = await triggerAgentRun(productName);
       setRunId(response.run_id);
-      const [nextRun, nextEvents] = await Promise.all([
-        getRun(response.run_id),
-        getRunEvents(response.run_id)
-      ]);
-      setRun(nextRun);
-      setEvents(nextEvents.events);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to trigger agent run");
     } finally {
@@ -73,17 +82,32 @@ export default function DashboardPage() {
       return;
     }
 
-    const timer = window.setInterval(async () => {
+    const terminalStatuses = new Set(["completed", "failed", "fallback_completed"]);
+    let cancelled = false;
+
+    const tick = async () => {
       try {
         const [nextRun, nextEvents] = await Promise.all([getRun(runId), getRunEvents(runId)]);
+        if (cancelled) return;
         setRun(nextRun);
         setEvents(nextEvents.events);
+        if (terminalStatuses.has(nextRun.status)) {
+          window.clearInterval(timer);
+        }
       } catch {
-        setError("Polling failed. Retrying with latest known run state.");
+        if (!cancelled) {
+          setError("Polling failed. Retrying with latest known run state.");
+        }
       }
-    }, 1500);
+    };
 
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(tick, 800);
+    tick();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [runId]);
 
   const visibleRun = run ?? mockRun;
@@ -105,9 +129,13 @@ export default function DashboardPage() {
           <p className={styles.eyebrow}>Operator dashboard</p>
           <h1>Live Agent Run</h1>
         </div>
-        <a href={visibleRun.store_url} className={styles.storeLink}>
-          {visibleRun.store_url.replace("https://", "")}
-        </a>
+        {visibleRun.store_url ? (
+          <a href={visibleRun.store_url} className={styles.storeLink}>
+            {visibleRun.store_url.replace(/^https?:\/\//, "")}
+          </a>
+        ) : (
+          <span className={styles.storeLink}>pending...</span>
+        )}
       </header>
 
       <section className={styles.controlPanel}>
@@ -118,6 +146,20 @@ export default function DashboardPage() {
             value={productName}
             onChange={(event) => setProductName(event.target.value)}
           />
+          <div className={styles.chips}>
+            {demoProducts.map((product) => (
+              <button
+                type="button"
+                key={product}
+                className={styles.chip}
+                data-active={product === productName}
+                onClick={() => setProductName(product)}
+                disabled={isTriggering}
+              >
+                {product}
+              </button>
+            ))}
+          </div>
           <datalist id="demo-products">
             {demoProducts.map((product) => (
               <option key={product} value={product} />
@@ -155,7 +197,11 @@ export default function DashboardPage() {
           <LaunchScore score={score} />
           <section className={styles.finalUrl}>
             <h2>Final Store URL</h2>
-            <a href={visibleRun.store_url}>{visibleRun.store_url}</a>
+            {visibleRun.store_url ? (
+              <a href={visibleRun.store_url}>{visibleRun.store_url}</a>
+            ) : (
+              <p>Provisioning storefront...</p>
+            )}
           </section>
         </aside>
       </div>

@@ -10,7 +10,6 @@ import os
 import time
 from pathlib import Path
 
-import anthropic
 import httpx
 
 from agents.schemas import AgentMessage, AdvertisingPayload
@@ -70,6 +69,12 @@ def extract_features_from_image(image_url: str | None, image_path: str | None = 
     Returns dict with features, use_cases, quality_tier, selling_points.
     """
     if not image_url and not image_path:
+        return {"features": [], "use_cases": [], "quality_tier": "mid-range", "selling_points": []}
+
+    try:
+        import anthropic
+    except ImportError:
+        logger.warning("[advertising] anthropic package not installed - skipping image feature extraction")
         return {"features": [], "use_cases": [], "quality_tier": "mid-range", "selling_points": []}
 
     client = anthropic.Anthropic()
@@ -145,7 +150,6 @@ def run_advertising_agent(
     Generates all advertising assets for a product.
     Optionally extracts features from a product image (multimodal).
     """
-    client = anthropic.Anthropic()
     start = time.time()
 
     # Step 1: Multimodal feature extraction (if image available)
@@ -192,6 +196,24 @@ Generate advertising assets. Return JSON only.
             seo_keywords=[product_name, f"best {product_name}", f"buy {product_name}", f"{product_name} review"],
         )
         return AgentMessage.success("advertising", "ceo", "ads_complete", payload.__dict__, business_id)
+
+    try:
+        import anthropic
+    except ImportError:
+        logger.warning("[advertising] anthropic package not installed - returning mock ad copy")
+        slug_name = product_name.title().replace(" ", "") + " Pro"
+        payload = AdvertisingPayload(
+            product_name=slug_name,
+            tagline=f"The smarter way to use {product_name}.",
+            ad_copy=f"{slug_name} delivers practical performance for everyday buyers.",
+            hero_image_prompt=f"professional product photography of {product_name}, white background, studio lighting",
+            hero_image_url=product_image_url,
+            features=image_features.get("features", []),
+            seo_keywords=[product_name, f"best {product_name}", f"buy {product_name}"],
+        )
+        return AgentMessage.success("advertising", "ceo", "ads_complete", payload.__dict__, business_id)
+
+    client = anthropic.Anthropic()
 
     try:
         logger.info(f"[advertising] Generating ads for: {product_name}")

@@ -18,6 +18,15 @@ def _bearer_token(authorization: str | None) -> str:
     return token
 
 
+def get_authenticated_user(authorization: str | None) -> dict:
+    store = get_client()
+    user_id = verify_access_token(_bearer_token(authorization))
+    user = store.get_user_by_id(user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
+    return user
+
+
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def signup(request: AuthSignupRequest) -> AuthResponse:
     store = get_client()
@@ -48,9 +57,4 @@ async def login(request: AuthLoginRequest) -> AuthResponse:
 
 @router.get("/me", response_model=AuthUser)
 async def me(authorization: str | None = Header(default=None)) -> AuthUser:
-    store = get_client()
-    user_id = verify_access_token(_bearer_token(authorization))
-    user = store.get_user_by_id(user_id)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
-    return public_user(user)
+    return public_user(get_authenticated_user(authorization))

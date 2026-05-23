@@ -121,6 +121,35 @@ def test_cors_allows_local_dashboard_preflight() -> None:
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
 
+def test_trigger_requires_auth_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    monkeypatch.setenv("REQUIRE_AUTH_FOR_RUNS", "true")
+    client = TestClient(app)
+
+    response = client.post("/api/demo/trigger", json={"product_name": "Magnetic Phone Mount"})
+
+    assert response.status_code == 401
+
+
+def test_trigger_accepts_bearer_token_when_auth_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    monkeypatch.setenv("REQUIRE_AUTH_FOR_RUNS", "true")
+    monkeypatch.setenv("AUTH_SECRET", "test-secret")
+    client = TestClient(app)
+    signup = client.post(
+        "/api/auth/signup",
+        json={"email": "owner@fastaisolution.com", "password": "correct horse battery", "full_name": "Store Owner"},
+    ).json()
+
+    response = client.post(
+        "/api/demo/trigger",
+        json={"product_name": "Magnetic Phone Mount"},
+        headers={"Authorization": f"Bearer {signup['access_token']}"},
+    )
+
+    assert response.status_code == 200
+
+
 def test_temporal_result_persistence_updates_run_and_events(monkeypatch) -> None:
     monkeypatch.setenv("USE_TEMPORAL", "false")
     client = TestClient(app)
@@ -145,6 +174,77 @@ def test_temporal_result_persistence_updates_run_and_events(monkeypatch) -> None
     assert run["status"] == "fallback_completed"
     assert run["store_url"] == "https://portablepowerstation.fastaisolution.com"
     assert len(events) == 6
+
+
+def test_temporal_result_persistence_accepts_serialized_workflow_result(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    client = TestClient(app)
+    trigger = client.post("/api/demo/trigger", json={"product_name": "Portable Power Station"}).json()
+    run_id = trigger["run_id"]
+    workflow_input = WorkflowInput(
+        run_id=run_id,
+        product_name="Portable Power Station",
+        temporal_workflow_id=trigger["temporal_workflow_id"],
+    )
+    result = asyncio.run(execute_fixture_launch(workflow_input))
+
+    class Handle:
+        async def result(self):
+            return result.model_dump(mode="json")
+
+    run_store.set_events(result.run.run_id, [])
+    asyncio.run(_persist_temporal_result(Handle(), result.run.run_id))
+
+    run = client.get(f"/api/runs/{run_id}").json()
+    events = client.get(f"/api/runs/{run_id}/events").json()["events"]
+    assert run["status"] == "fallback_completed"
+    assert run["store_url"] == "https://portablepowerstation.fastaisolution.com"
+    assert len(events) == 6
+
+
+def test_streaming_launch_emits_running_then_completed_per_agent() -> None:
+    from backend.workflows.activities import execute_streaming_launch
+
+    run_id = UUID("11111111-1111-1111-1111-111111111111")
+    workflow_input = WorkflowInput(
+        run_id=run_id,
+        product_name="Magnetic Phone Mount",
+        temporal_workflow_id=f"launch-store-{run_id}",
+    )
+    captured: list[tuple[str, str]] = []
+
+    def on_event(event):
+        captured.append((event.agent_name, event.event_type))
+
+    progressed: list[str] = []
+
+    def on_progress(run):
+        progressed.append(run.status)
+
+    asyncio.run(
+        execute_streaming_launch(
+            workflow_input, delay_ms=0, on_event=on_event, on_progress=on_progress
+        )
+    )
+
+    agents = ["research", "buyer", "legal_risk", "advertising", "score_launch", "store_creator"]
+    for agent in agents:
+        assert (agent, "running") in captured, f"missing running for {agent}"
+        assert (agent, "completed") in captured, f"missing completed for {agent}"
+    # Running fires before completed for each agent.
+    for agent in agents:
+        running_idx = captured.index((agent, "running"))
+        completed_idx = captured.index((agent, "completed"))
+        assert running_idx < completed_idx
+    assert "running" in progressed
+    assert progressed[-1] == "fallback_completed"
+
+
+def test_build_store_url_uses_localhost_scheme_for_local_domain(monkeypatch) -> None:
+    from backend.workflows.activities import build_store_url
+
+    assert build_store_url("magneticphonemount", "localhost:3000") == "http://magneticphonemount.localhost:3000"
+    assert build_store_url("magneticphonemount", "fastaisolution.com") == "https://magneticphonemount.fastaisolution.com"
 
 
 def test_temporal_result_persistence_marks_failures(monkeypatch) -> None:

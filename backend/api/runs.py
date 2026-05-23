@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 
+from backend.api.auth import get_authenticated_user
 from backend.schemas import (
     AgentEventsResponse,
     LaunchRequest,
@@ -17,7 +18,12 @@ from backend.schemas import (
 )
 from backend.settings import get_settings
 from backend.store import run_store
-from backend.workflows.activities import execute_fixture_launch, slugify_product
+from backend.workflows.activities import (
+    build_store_url,
+    execute_fixture_launch,
+    execute_streaming_launch,
+    slugify_product,
+)
 
 router = APIRouter(prefix="/api", tags=["runs"])
 
@@ -26,7 +32,7 @@ def _fixture_store(slug: str, run_id: UUID | None = None) -> StoreOutput:
     return StoreOutput(
         store_id=run_id or uuid5(NAMESPACE_URL, f"auto-ecommerce-store:{slug}"),
         slug=slug,
-        store_url=f"https://{slug}.fastaisolution.com",
+        store_url=build_store_url(slug),
         product_name="MagSnap Pro",
         description="A compact magnetic phone mount built for fast one-handed docking and a cleaner dashboard.",
         price=29.99,
@@ -36,8 +42,11 @@ def _fixture_store(slug: str, run_id: UUID | None = None) -> StoreOutput:
     )
 
 
-async def _start_launch(request: LaunchRequest) -> LaunchTriggerResponse:
+async def _start_launch(request: LaunchRequest, authorization: str | None = None) -> LaunchTriggerResponse:
     settings = get_settings()
+    if settings.require_auth_for_runs:
+        get_authenticated_user(authorization)
+
     run_id = uuid4()
     temporal_workflow_id = f"launch-store-{run_id}"
     slug = slugify_product(request.product_name)
@@ -76,6 +85,8 @@ async def _start_launch(request: LaunchRequest) -> LaunchTriggerResponse:
             task_queue=settings.temporal_task_queue,
         )
         asyncio.create_task(_persist_temporal_result(handle, run_id))
+    elif settings.agent_stream_delay_ms > 0:
+        asyncio.create_task(_run_streaming_fixture(workflow_input, settings.agent_stream_delay_ms))
     else:
         result = await execute_fixture_launch(workflow_input)
         run_store.upsert_run(result.run)
@@ -86,6 +97,28 @@ async def _start_launch(request: LaunchRequest) -> LaunchTriggerResponse:
         status=RunStatus.started,
         temporal_workflow_id=temporal_workflow_id,
     )
+
+
+async def _run_streaming_fixture(workflow_input: WorkflowInput, delay_ms: int) -> None:
+    def _on_event(event):
+        run_store.add_event(workflow_input.run_id, event)
+
+    def _on_progress(run):
+        run_store.upsert_run(run)
+
+    try:
+        await execute_streaming_launch(
+            workflow_input,
+            delay_ms=delay_ms,
+            on_event=_on_event,
+            on_progress=_on_progress,
+        )
+    except Exception as exc:
+        run = run_store.get_run(workflow_input.run_id)
+        if run is not None:
+            run.status = RunStatus.failed
+            run.error = str(exc)
+            run_store.upsert_run(run)
 
 
 async def _persist_temporal_result(handle, run_id: UUID) -> None:
@@ -99,18 +132,27 @@ async def _persist_temporal_result(handle, run_id: UUID) -> None:
             run_store.upsert_run(run)
         return
 
+    if not isinstance(result, WorkflowResult):
+        result = WorkflowResult.model_validate(result)
+
     run_store.upsert_run(result.run)
     run_store.set_events(result.run.run_id, result.events)
 
 
 @router.post("/demo/trigger", response_model=LaunchTriggerResponse)
-async def demo_trigger(request: LaunchRequest | None = None) -> LaunchTriggerResponse:
-    return await _start_launch(request or LaunchRequest())
+async def demo_trigger(
+    request: LaunchRequest | None = None,
+    authorization: str | None = Header(default=None),
+) -> LaunchTriggerResponse:
+    return await _start_launch(request or LaunchRequest(), authorization=authorization)
 
 
 @router.post("/launch-store", response_model=LaunchTriggerResponse)
-async def launch_store(request: LaunchRequest) -> LaunchTriggerResponse:
-    return await _start_launch(request)
+async def launch_store(
+    request: LaunchRequest,
+    authorization: str | None = Header(default=None),
+) -> LaunchTriggerResponse:
+    return await _start_launch(request, authorization=authorization)
 
 
 @router.get("/runs/{run_id}", response_model=LaunchRun)

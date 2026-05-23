@@ -6,6 +6,7 @@ const steps: Array<{ agent: AgentName; label: string }> = [
   { agent: "buyer", label: "Buyer" },
   { agent: "legal_risk", label: "Legal / Risk" },
   { agent: "advertising", label: "Advertising" },
+  { agent: "score_launch", label: "Score Launch" },
   { agent: "store_creator", label: "Store Creator" }
 ];
 
@@ -23,11 +24,21 @@ export function getStepStatus(agent: AgentName, events: AgentEvent[]): EventType
 }
 
 export function AgentTimeline({ events }: { events: AgentEvent[] }) {
+  const completedCount = steps.filter(
+    (step) => getStepStatus(step.agent, events) === "completed"
+  ).length;
+  const progressPct = Math.round((completedCount / steps.length) * 100);
+
   return (
     <section className={styles.panel} aria-label="Agent timeline">
       <div className={styles.header}>
         <h2>Agent Pipeline</h2>
-        <span>{events.length} events</span>
+        <span>
+          {completedCount}/{steps.length} agents · {events.length} events
+        </span>
+      </div>
+      <div className={styles.progressBar} role="progressbar" aria-valuenow={progressPct}>
+        <div className={styles.progressFill} style={{ width: `${progressPct}%` }} />
       </div>
       <div className={styles.timeline}>
         {steps.map((step) => {

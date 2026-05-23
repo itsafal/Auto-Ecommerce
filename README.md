@@ -1,6 +1,5 @@
 # Auto-Ecommerce
-
-AI-powered product testing with a FastAPI backend, a Next.js dashboard/storefront, fixture-backed agent runs, and optional ClickHouse persistence.
+Auto-Ecommerce is an autonomous multi-agent system that detects niche microtrends and monopolizes on them by automatically launching a full e-commerce store, end to end with no human needed, in minutes. A CEO Orchestrator Agent coordinates a pipeline of specialized sub-agents: the Research Agent uses Nimble to find trending products and competitor prices, a Buyer Agent sources suppliers, a Legal Agent checks compliance, and an Advertising Agent generates copy. Results are stored in ClickHouse for persistence and metrics, with Datadog handling observability across the pipeline, while a Next.js dashboard lets operators trigger runs and watch every agent fire in real time, backed by a FastAPI backend for auth and run management.
 
 ## Prerequisites
 
@@ -32,6 +31,7 @@ USE_TEMPORAL=false
 DEMO_MODE=true
 AUTH_SECRET=replace-this-with-a-long-random-secret
 AUTH_TOKEN_TTL_MINUTES=10080
+REQUIRE_AUTH_FOR_RUNS=false
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 NEXT_PUBLIC_USE_MOCKS=false
 ```
@@ -170,9 +170,27 @@ USE_CLICKHOUSE=false
 USE_TEMPORAL=false
 USE_AGENT_FIXTURES=true
 NEXT_PUBLIC_USE_MOCKS=false
+REQUIRE_AUTH_FOR_RUNS=true
 ```
 
 For real ClickHouse persistence, set `USE_CLICKHOUSE=true` on the backend service and fill in the `CLICKHOUSE_*` secret values in Render. Do not put real secrets in `render.yaml` or `.env.example`.
+
+For real Gemini content generation, set these on the backend service:
+
+```env
+USE_AGENT_FIXTURES=false
+GOOGLE_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+For Nimble trend ingestion, set `NIMBLE_API_KEY` and `NIMBLE_API_URL` on the backend service when the Nimble endpoint contract is available.
+
+Useful deployment checks:
+
+```bash
+just render-check
+just render-env
+```
 
 ## Smoke Test
 

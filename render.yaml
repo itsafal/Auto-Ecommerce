@@ -1,66 +1,74 @@
-# Render deployment is paused while we polish the app locally.
-# Uncomment the services below when fastaisolution.com is ready to go live.
-#
-# services:
-#   - type: web
-#     name: auto-ecommerce-backend
-#     runtime: python
-#     plan: free
-#     buildCommand: uv sync --extra temporal
-#     startCommand: uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT
-#     envVars:
-#       - name: USE_CLICKHOUSE
-#         value: "true"
-#       - name: USE_AGENT_FIXTURES
-#         value: "true"
-#       - name: USE_TEMPORAL
-#         value: "false"
-#       - name: DEMO_MODE
-#         value: "true"
-#       - name: BASE_DOMAIN
-#         value: fastaisolution.com
-#       - name: TEMPORAL_TASK_QUEUE
-#         value: launch-store
-#       - name: AUTH_SECRET
-#         generateValue: true
-#       - name: AUTH_TOKEN_TTL_MINUTES
-#         value: "10080"
-#       - name: CLICKHOUSE_HOST
-#         sync: false
-#       - name: CLICKHOUSE_PORT
-#         value: "8443"
-#       - name: CLICKHOUSE_USER
-#         sync: false
-#       - name: CLICKHOUSE_PASSWORD
-#         sync: false
-#       - name: CLICKHOUSE_DATABASE
-#         sync: false
-#       - name: CLICKHOUSE_SECURE
-#         value: "true"
-#       - name: GOOGLE_API_KEY
-#         sync: false
-#       - name: GOOGLE_GENAI_USE_VERTEXAI
-#         value: "false"
-#       - name: GOOGLE_CLOUD_PROJECT
-#         sync: false
-#       - name: GOOGLE_CLOUD_LOCATION
-#         sync: false
-#       - name: NIMBLE_API_KEY
-#         sync: false
-#       - name: DATADOG_API_KEY
-#         sync: false
-#       - name: DATADOG_SITE
-#         sync: false
-#
-#   - type: web
-#     name: auto-ecommerce-frontend
-#     runtime: node
-#     plan: free
-#     rootDir: frontend
-#     buildCommand: corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm build
-#     startCommand: corepack pnpm exec next start -H 0.0.0.0 -p $PORT
-#     envVars:
-#       - name: NEXT_PUBLIC_USE_MOCKS
-#         value: "false"
-#       - name: NEXT_PUBLIC_API_BASE_URL
-#         value: https://auto-ecommerce-backend.onrender.com
+# Render blueprint. autoDeploy is disabled on both services while we polish
+# the app locally. To turn deployment on later: set `autoDeploy: true` (or
+# trigger a manual deploy from the Render dashboard).
+services:
+  - type: web
+    name: auto-ecommerce-backend
+    runtime: python
+    plan: free
+    autoDeploy: false
+    buildCommand: pip install uv && uv sync --extra temporal --frozen
+    startCommand: uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: USE_CLICKHOUSE
+        value: "false"
+      - key: USE_AGENT_FIXTURES
+        value: "true"
+      - key: USE_TEMPORAL
+        value: "false"
+      - key: DEMO_MODE
+        value: "true"
+      - key: BASE_DOMAIN
+        value: fastaisolution.com
+      - key: TEMPORAL_TASK_QUEUE
+        value: launch-store
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_TOKEN_TTL_MINUTES
+        value: "10080"
+      - key: REQUIRE_AUTH_FOR_RUNS
+        value: "true"
+      - key: CLICKHOUSE_HOST
+        sync: false
+      - key: CLICKHOUSE_PORT
+        value: "8443"
+      - key: CLICKHOUSE_USER
+        sync: false
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
+      - key: CLICKHOUSE_DATABASE
+        sync: false
+      - key: CLICKHOUSE_SECURE
+        value: "true"
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GOOGLE_GENAI_USE_VERTEXAI
+        value: "false"
+      - key: GOOGLE_CLOUD_PROJECT
+        sync: false
+      - key: GOOGLE_CLOUD_LOCATION
+        sync: false
+      - key: NIMBLE_API_KEY
+        sync: false
+      - key: NIMBLE_API_URL
+        sync: false
+      - key: DATADOG_API_KEY
+        sync: false
+      - key: DATADOG_SITE
+        sync: false
+
+  - type: web
+    name: auto-ecommerce-frontend
+    runtime: node
+    plan: free
+    rootDir: frontend
+    autoDeploy: false
+    buildCommand: corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm build
+    startCommand: corepack pnpm exec next start -H 0.0.0.0 -p $PORT
+    envVars:
+      - key: NEXT_PUBLIC_USE_MOCKS
+        value: "false"
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
