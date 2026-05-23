@@ -1,29 +1,29 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
 .venv/
+__pycache__/
 .pytest_cache/
-.ruff_cache/
+*.py[cod]
+
+# Python tooling
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
 
-# uv
-uv.lock
-
-# Env
-.env
-.env.local
-
-# OS
-.DS_Store
-
-# IDE
-.vscode/
-.idea/
-
-# Node
+# Node / Next.js
 node_modules/
 .next/
-.pnpm-store/
-dist/
+out/
 coverage/
+
+# Logs and local OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# Local secrets
+.env
+.env.*
+!.env.example
