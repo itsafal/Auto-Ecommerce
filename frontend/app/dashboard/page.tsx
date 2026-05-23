@@ -1,22 +1,25 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AgentFeed } from "@/components/AgentFeed";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { LaunchScore } from "@/components/LaunchScore";
-import { getRun, getRunEvents, triggerAgentRun } from "@/lib/api";
+import { getCurrentUser, getRun, getRunEvents, triggerAgentRun, useMockMode } from "@/lib/api";
 import { type AgentEvent, type LaunchRun, mockEvents, mockRun, mockScore } from "@/lib/mock-data";
 import styles from "./page.module.css";
 
 const demoProducts = ["Magnetic Phone Mount", "Ergo Keyboard", "Portable Blender"];
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [productName, setProductName] = useState("Magnetic Phone Mount");
   const [runId, setRunId] = useState<string | null>(null);
   const [run, setRun] = useState<LaunchRun | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [isTriggering, setIsTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSessionReady, setIsSessionReady] = useState(useMockMode);
 
   const score = useMemo(() => {
     if (!run) {
@@ -24,6 +27,26 @@ export default function DashboardPage() {
     }
     return { ...mockScore, launch_score: run.launch_score, decision: run.decision };
   }, [run]);
+
+  useEffect(() => {
+    if (useMockMode()) {
+      return;
+    }
+
+    const token = window.localStorage.getItem("auto_ecommerce_token");
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    getCurrentUser(token)
+      .then(() => setIsSessionReady(true))
+      .catch(() => {
+        window.localStorage.removeItem("auto_ecommerce_token");
+        window.localStorage.removeItem("auto_ecommerce_user");
+        router.replace("/login");
+      });
+  }, [router]);
 
   async function handleTrigger() {
     setIsTriggering(true);
@@ -65,6 +88,15 @@ export default function DashboardPage() {
 
   const visibleRun = run ?? mockRun;
   const visibleEvents = events.length > 0 ? events : mockEvents.slice(0, runId ? mockEvents.length : 0);
+
+  if (!isSessionReady) {
+    return (
+      <main className={styles.shell}>
+        <p className={styles.eyebrow}>Operator dashboard</p>
+        <h1>Checking session</h1>
+      </main>
+    );
+  }
 
   return (
     <main className={styles.shell}>

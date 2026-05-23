@@ -27,14 +27,14 @@ export type AuthResponse = {
   user: AuthUser;
 };
 
-const useMocks = () =>
+export const useMockMode = () =>
   process.env.NEXT_PUBLIC_USE_MOCKS !== "false" ||
   !process.env.NEXT_PUBLIC_API_BASE_URL;
 
 const apiBaseUrl = () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export async function triggerAgentRun(productName: string): Promise<TriggerResponse> {
-  if (useMocks()) {
+  if (useMockMode()) {
     return {
       run_id: mockRunId,
       status: "started",
@@ -54,7 +54,7 @@ export async function triggerAgentRun(productName: string): Promise<TriggerRespo
 }
 
 export async function getRun(runId: string): Promise<LaunchRun> {
-  if (useMocks()) {
+  if (useMockMode()) {
     return { ...mockRun, run_id: runId };
   }
 
@@ -66,7 +66,7 @@ export async function getRun(runId: string): Promise<LaunchRun> {
 }
 
 export async function getRunEvents(runId: string): Promise<{ run_id: string; events: AgentEvent[] }> {
-  if (useMocks()) {
+  if (useMockMode()) {
     return { run_id: runId, events: mockEvents };
   }
 
@@ -78,7 +78,7 @@ export async function getRunEvents(runId: string): Promise<{ run_id: string; eve
 }
 
 export async function getStore(slug: string): Promise<StoreConfig> {
-  if (useMocks()) {
+  if (useMockMode()) {
     return getStoreBySlug(slug) ?? { ...mockStore, slug };
   }
 
