@@ -27,7 +27,9 @@ class Settings:
     # explicitly disable via REQUIRE_AUTH_FOR_RUNS=false in their .env/conftest.
     require_auth_for_runs: bool = True
     google_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    # flash-lite has 1000 req/day free vs flash's 20 req/min, which matters
+    # when the dashboard polls trending products on every mount.
+    gemini_model: str = "gemini-2.5-flash-lite"
     portkey_api_key: str = ""
     portkey_base_url: str = "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"
     portkey_model: str = "@vertexai/gemini-3.5-flash"
@@ -49,7 +51,7 @@ def get_settings() -> Settings:
         agent_stream_delay_ms=int(os.getenv("AGENT_STREAM_DELAY_MS", "0")),
         require_auth_for_runs=_env_bool("REQUIRE_AUTH_FOR_RUNS", True),
         google_api_key=os.getenv("GOOGLE_API_KEY", ""),
-        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
         portkey_api_key=os.getenv("PORTKEY_API_KEY", ""),
         portkey_base_url=os.getenv("PORTKEY_BASE_URL", "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"),
         portkey_model=os.getenv("PORTKEY_MODEL", "@vertexai/gemini-3.5-flash"),

@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
+import time
 from datetime import datetime
 from typing import Awaitable, Callable
 from uuid import uuid4
 
 import httpx
+
+logger = logging.getLogger(__name__)
+
+# Last seen failure reason from either LLM path. Surfaced in /api/agents/trending-products
+# so the dashboard can show *why* a refresh fell back to fixture instead of silently lying.
+_last_llm_error: str | None = None
 
 from backend.schemas import (
     AdvertisingOutput,
@@ -204,6 +212,7 @@ def _parse_json_text(text: str) -> dict | None:
 
 
 async def _portkey_json(prompt: str) -> dict | None:
+    global _last_llm_error
     settings = get_settings()
     if not settings.portkey_api_key:
         return None
@@ -227,12 +236,21 @@ async def _portkey_json(prompt: str) -> dict | None:
             response = await client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
             response.raise_for_status()
             text = response.json()["choices"][0]["message"]["content"]
-    except Exception:
+    except httpx.HTTPStatusError as exc:
+        msg = f"portkey {exc.response.status_code}: {exc.response.text[:200]}"
+        logger.warning("[llm] %s", msg)
+        _last_llm_error = msg
+        return None
+    except Exception as exc:
+        msg = f"portkey {type(exc).__name__}: {exc}"
+        logger.warning("[llm] %s", msg)
+        _last_llm_error = msg
         return None
     return _parse_json_text(text)
 
 
 async def _google_gemini_json(prompt: str) -> dict | None:
+    global _last_llm_error
     settings = get_settings()
     if not settings.google_api_key:
         return None
@@ -244,7 +262,15 @@ async def _google_gemini_json(prompt: str) -> dict | None:
             response = await client.post(url, params={"key": settings.google_api_key}, json=payload)
             response.raise_for_status()
             text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
+    except httpx.HTTPStatusError as exc:
+        msg = f"google {exc.response.status_code}: {exc.response.text[:200]}"
+        logger.warning("[llm] %s", msg)
+        _last_llm_error = msg
+        return None
+    except Exception as exc:
+        msg = f"google {type(exc).__name__}: {exc}"
+        logger.warning("[llm] %s", msg)
+        _last_llm_error = msg
         return None
 
     return _parse_json_text(text)
@@ -274,16 +300,33 @@ _FALLBACK_TRENDING = [
 ]
 
 
+_TRENDING_CACHE: dict | None = None
+_TRENDING_CACHE_AT: float = 0.0
+_TRENDING_CACHE_TTL_SECONDS = 60.0
+
+
 async def discover_trending_products(limit: int = 8) -> dict:
     """Trend Scout agent: returns a list of currently trending DTC product names.
 
     Uses Gemini when configured; otherwise falls back to a curated rotating list.
+    Cached for ~60s so a dashboard that mounts multiple times doesn't burn through
+    free-tier LLM quota on repeated identical calls.
     """
+    global _TRENDING_CACHE, _TRENDING_CACHE_AT, _last_llm_error
+
+    now = time.monotonic()
+    if _TRENDING_CACHE is not None and (now - _TRENDING_CACHE_AT) < _TRENDING_CACHE_TTL_SECONDS:
+        cached = dict(_TRENDING_CACHE)
+        cached["products"] = cached["products"][:limit]
+        cached["cached"] = True
+        return cached
+
     prompt = (
         f"List {limit} currently trending single-product dropshipping ideas that would "
         "work as a focused one-product store. Mix tech, wellness, home, fitness, lifestyle. "
         "Return ONLY JSON: {\"products\": [\"...\", ...]}. No commentary."
     )
+    _last_llm_error = None
     result = await _gemini_json(prompt, ignore_fixture_flag=True)
     products: list[str] = []
     if isinstance(result, dict):
@@ -298,7 +341,17 @@ async def discover_trending_products(limit: int = 8) -> dict:
         random.shuffle(pool)
         products = pool[:limit]
 
-    return {"products": products[:limit], "source": "gemini" if result else "fixture"}
+    response = {
+        "products": products[:limit],
+        "source": "gemini" if result else "fixture",
+        "cached": False,
+    }
+    if not result and _last_llm_error:
+        response["llm_error"] = _last_llm_error
+
+    _TRENDING_CACHE = response
+    _TRENDING_CACHE_AT = now
+    return dict(response)
 
 
 def make_event(
@@ -319,6 +372,51 @@ def make_event(
 
 @activity.defn
 async def research_activity(product_name: str) -> ResearchOutput:
+    # 1. Real market data from Nimble SERP (organic + shopping listings).
+    from backend.integrations.nimble import fetch_serp_summary
+
+    nimble = await fetch_serp_summary(product_name)
+
+    if nimble:
+        # 2. Ground Gemini in the actual SERP data instead of letting it hallucinate.
+        prompt = f"""
+You are analyzing real Google SERP data for an e-commerce product.
+
+Product: {product_name}
+SERP data (from Nimble, US, today):
+- organic_count: {nimble['organic_count']}
+- shopping_count: {nimble['shopping_count']}
+- related_count: {nimble['related_count']}
+- price_range observed: low=${nimble['price_low']}, high=${nimble['price_high']}
+- sample prices: {nimble['price_samples']}
+- top organic results: {nimble['top_organic']}
+- related searches: {nimble['related_queries']}
+
+Return JSON only (numbers must reflect the SERP data above, not hallucinated):
+{{
+  "category": "short_snake_case",
+  "trend_score": 0.0,                  // 0-1, derive from shopping_count + organic_count + related_count
+  "search_volume": 0,                  // estimate from organic_count (e.g. organic_count * 1500 as a proxy)
+  "social_mentions": 0,                // estimate from related_count (e.g. related_count * 800 as a proxy)
+  "competitor_summary": "one sentence grounded in the top_organic titles/snippets",
+  "price_range": {{"low": 0.0, "high": 0.0}},
+  "confidence": 0.0                    // higher when there's more SERP data
+}}
+""".strip()
+        generated = await _gemini_json(prompt, ignore_fixture_flag=True)
+        if generated:
+            # Force the real Nimble price range into the response if Gemini drifted.
+            if nimble["price_low"] and nimble["price_high"]:
+                generated["price_range"] = {
+                    "low": nimble["price_low"],
+                    "high": nimble["price_high"],
+                }
+            try:
+                return ResearchOutput(product_name=product_name, **generated)
+            except Exception:
+                pass
+
+    # 3. No Nimble (off VPN / no key / API down). Fall back to LLM-only.
     prompt = f"""
 Return JSON only for ecommerce product research:
 {{
@@ -339,6 +437,7 @@ Product: {product_name}
         except Exception:
             pass
 
+    # 4. Last resort: curated fixture profile.
     profile = _product_profile(product_name)
     return ResearchOutput(
         product_name=product_name,
@@ -649,13 +748,99 @@ def build_launch_result(
     return WorkflowResult(run=run, events=events, store=store)
 
 
+def _model_label() -> str:
+    """Best-effort label of which LLM the agents would have used."""
+    s = get_settings()
+    if s.portkey_api_key:
+        return s.portkey_model
+    if s.google_api_key:
+        return s.gemini_model
+    return "fixture"
+
+
+def _summarize(value) -> str:
+    """Compact string of an output for the agent_decisions log."""
+    try:
+        if hasattr(value, "model_dump"):
+            return json.dumps(value.model_dump(mode="json"), default=str)[:480]
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, default=str)[:480]
+        return str(value)[:480]
+    except Exception:
+        return str(value)[:480]
+
+
+async def _timed_decision(
+    run_id,
+    agent_name: AgentName,
+    action: str,
+    runner: Callable[[], Awaitable],
+    *,
+    input_summary: str = "",
+):
+    """Run an activity and persist a row to agent_decisions with latency."""
+    # Local import to avoid a circular dependency at module load time.
+    from backend.store import run_store
+
+    started = time.monotonic()
+    try:
+        result = await runner()
+        latency_ms = int((time.monotonic() - started) * 1000)
+        run_store.record_decision(
+            run_id=run_id,
+            agent_name=agent_name.value if hasattr(agent_name, "value") else str(agent_name),
+            action=action,
+            input_summary=input_summary,
+            output_summary=_summarize(result),
+            latency_ms=latency_ms,
+            model_used=_model_label(),
+        )
+        return result
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - started) * 1000)
+        run_store.record_decision(
+            run_id=run_id,
+            agent_name=agent_name.value if hasattr(agent_name, "value") else str(agent_name),
+            action=f"{action}_failed",
+            input_summary=input_summary,
+            output_summary=f"{type(exc).__name__}: {exc}",
+            latency_ms=latency_ms,
+            model_used=_model_label(),
+        )
+        raise
+
+
 async def execute_fixture_launch(workflow_input: WorkflowInput) -> WorkflowResult:
-    research = await research_activity(workflow_input.product_name)
-    buyer = await buyer_activity(research)
-    risk = await legal_risk_activity(research, buyer)
-    advertising = await advertising_activity(research, buyer, risk)
-    score = await score_launch_activity(research, buyer, risk)
-    store = await create_store_activity(workflow_input, advertising, buyer)
+    research = await _timed_decision(
+        workflow_input.run_id, AgentName.research, "research_product",
+        lambda: research_activity(workflow_input.product_name),
+        input_summary=workflow_input.product_name,
+    )
+    buyer = await _timed_decision(
+        workflow_input.run_id, AgentName.buyer, "select_supplier",
+        lambda: buyer_activity(research),
+        input_summary=f"product={workflow_input.product_name} category={getattr(research, 'category', '')}",
+    )
+    risk = await _timed_decision(
+        workflow_input.run_id, AgentName.legal_risk, "assess_risk",
+        lambda: legal_risk_activity(research, buyer),
+        input_summary=workflow_input.product_name,
+    )
+    advertising = await _timed_decision(
+        workflow_input.run_id, AgentName.advertising, "generate_copy",
+        lambda: advertising_activity(research, buyer, risk),
+        input_summary=workflow_input.product_name,
+    )
+    score = await _timed_decision(
+        workflow_input.run_id, AgentName.score_launch, "score_launch",
+        lambda: score_launch_activity(research, buyer, risk),
+        input_summary=f"trend={research.trend_score} margin={buyer.margin_score}",
+    )
+    store = await _timed_decision(
+        workflow_input.run_id, AgentName.store_creator, "create_store",
+        lambda: create_store_activity(workflow_input, advertising, buyer),
+        input_summary=workflow_input.product_name,
+    )
 
     return build_launch_result(
         workflow_input=workflow_input,
@@ -733,16 +918,23 @@ async def execute_streaming_launch(
     )
     await _progress(on_progress, base_run)
 
-    async def _step(agent: AgentName, runner):
+    async def _step(agent: AgentName, runner, *, action: str, input_summary: str = ""):
         await _emit(
             on_event,
             make_event(agent, EventType.running, _RUNNING_MESSAGES[agent]),
         )
         if delay:
             await asyncio.sleep(delay)
-        return await runner()
+        return await _timed_decision(
+            workflow_input.run_id, agent, action, runner, input_summary=input_summary
+        )
 
-    research = await _step(AgentName.research, lambda: research_activity(workflow_input.product_name))
+    research = await _step(
+        AgentName.research,
+        lambda: research_activity(workflow_input.product_name),
+        action="research_product",
+        input_summary=workflow_input.product_name,
+    )
     await _emit(
         on_event,
         make_event(
@@ -753,7 +945,12 @@ async def execute_streaming_launch(
         ),
     )
 
-    buyer = await _step(AgentName.buyer, lambda: buyer_activity(research))
+    buyer = await _step(
+        AgentName.buyer,
+        lambda: buyer_activity(research),
+        action="select_supplier",
+        input_summary=f"product={workflow_input.product_name} category={getattr(research, 'category', '')}",
+    )
     await _emit(
         on_event,
         make_event(
@@ -764,7 +961,12 @@ async def execute_streaming_launch(
         ),
     )
 
-    risk = await _step(AgentName.legal_risk, lambda: legal_risk_activity(research, buyer))
+    risk = await _step(
+        AgentName.legal_risk,
+        lambda: legal_risk_activity(research, buyer),
+        action="assess_risk",
+        input_summary=workflow_input.product_name,
+    )
     await _emit(
         on_event,
         make_event(
@@ -776,7 +978,10 @@ async def execute_streaming_launch(
     )
 
     advertising = await _step(
-        AgentName.advertising, lambda: advertising_activity(research, buyer, risk)
+        AgentName.advertising,
+        lambda: advertising_activity(research, buyer, risk),
+        action="generate_copy",
+        input_summary=workflow_input.product_name,
     )
     await _emit(
         on_event,
@@ -788,7 +993,12 @@ async def execute_streaming_launch(
         ),
     )
 
-    score = await _step(AgentName.score_launch, lambda: score_launch_activity(research, buyer, risk))
+    score = await _step(
+        AgentName.score_launch,
+        lambda: score_launch_activity(research, buyer, risk),
+        action="score_launch",
+        input_summary=f"trend={research.trend_score} margin={buyer.margin_score}",
+    )
     await _emit(
         on_event,
         make_event(
@@ -799,7 +1009,12 @@ async def execute_streaming_launch(
         ),
     )
 
-    store = await _step(AgentName.store_creator, lambda: create_store_activity(workflow_input, advertising, buyer))
+    store = await _step(
+        AgentName.store_creator,
+        lambda: create_store_activity(workflow_input, advertising, buyer),
+        action="create_store",
+        input_summary=workflow_input.product_name,
+    )
     await _store_sink(on_store, store)
     await _emit(
         on_event,
