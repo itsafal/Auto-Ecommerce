@@ -5,11 +5,18 @@ import { useEffect, useMemo, useState } from "react";
 import { AgentFeed } from "@/components/AgentFeed";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { LaunchScore } from "@/components/LaunchScore";
-import { getCurrentUser, getRun, getRunEvents, triggerAgentRun, useMockMode } from "@/lib/api";
+import {
+  getCurrentUser,
+  getRun,
+  getRunEvents,
+  getTrendingProducts,
+  triggerAgentRun,
+  useMockMode
+} from "@/lib/api";
 import { type AgentEvent, type LaunchRun, mockEvents, mockRun, mockScore } from "@/lib/mock-data";
 import styles from "./page.module.css";
 
-const demoProducts = [
+const fallbackProducts = [
   "Magnetic Phone Mount",
   "Portable Power Station",
   "Red Light Therapy Mask",
