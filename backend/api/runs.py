@@ -20,6 +20,7 @@ from backend.settings import get_settings
 from backend.store import run_store
 from backend.workflows.activities import (
     build_store_url,
+    discover_trending_products,
     execute_fixture_launch,
     execute_streaming_launch,
     slugify_product,
@@ -191,3 +192,8 @@ async def get_store(slug: str) -> StoreOutput:
 @router.get("/agents/status")
 async def get_agents_status() -> dict[str, str]:
     return {"status": "ok", "mode": "fixture"}
+
+
+@router.get("/agents/trending-products")
+async def get_trending_products(limit: int = 8) -> dict:
+    return await discover_trending_products(limit=max(1, min(limit, 20)))

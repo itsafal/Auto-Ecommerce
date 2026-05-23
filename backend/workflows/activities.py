@@ -207,6 +207,46 @@ async def _gemini_json(prompt: str) -> dict | None:
         return None
 
 
+_FALLBACK_TRENDING = [
+    "Magnetic Phone Mount",
+    "Portable Power Station",
+    "Red Light Therapy Mask",
+    "Mini Portable Projector",
+    "Smart Ring Fitness Tracker",
+    "Portable Ice Bath",
+    "Smart Desk Lamp",
+    "Ergo Keyboard",
+    "Portable Blender",
+]
+
+
+async def discover_trending_products(limit: int = 8) -> dict:
+    """Trend Scout agent: returns a list of currently trending DTC product names.
+
+    Uses Gemini when configured; otherwise falls back to a curated rotating list.
+    """
+    prompt = (
+        f"List {limit} currently trending single-product dropshipping ideas that would "
+        "work as a focused one-product store. Mix tech, wellness, home, fitness, lifestyle. "
+        "Return ONLY JSON: {\"products\": [\"...\", ...]}. No commentary."
+    )
+    result = await _gemini_json(prompt)
+    products: list[str] = []
+    if isinstance(result, dict):
+        raw = result.get("products") or result.get("items") or []
+        if isinstance(raw, list):
+            products = [str(item).strip() for item in raw if str(item).strip()]
+
+    if not products:
+        import random
+
+        pool = list(_FALLBACK_TRENDING)
+        random.shuffle(pool)
+        products = pool[:limit]
+
+    return {"products": products[:limit], "source": "gemini" if result else "fixture"}
+
+
 def make_event(
     agent_name: AgentName,
     event_type: EventType,

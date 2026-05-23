@@ -123,6 +123,30 @@ export async function login(email: string, password: string): Promise<AuthRespon
   return response.json();
 }
 
+export async function getTrendingProducts(): Promise<{ products: string[]; source: string }> {
+  if (useMockMode()) {
+    return {
+      products: [
+        "Magnetic Phone Mount",
+        "Portable Power Station",
+        "Red Light Therapy Mask",
+        "Mini Portable Projector",
+        "Smart Ring Fitness Tracker",
+        "Portable Ice Bath",
+        "Smart Desk Lamp",
+        "Ergo Keyboard"
+      ],
+      source: "fixture"
+    };
+  }
+
+  const response = await fetch(`${apiBaseUrl()}/api/agents/trending-products`);
+  if (!response.ok) {
+    throw new Error("Failed to load trending products");
+  }
+  return response.json();
+}
+
 export async function getCurrentUser(token: string): Promise<AuthUser> {
   const response = await fetch(`${apiBaseUrl()}/api/auth/me`, {
     headers: { Authorization: `Bearer ${token}` }
