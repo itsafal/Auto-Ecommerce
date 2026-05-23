@@ -6,53 +6,53 @@ services:
     buildCommand: pip install uv && uv sync --extra temporal --frozen
     startCommand: uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - name: USE_CLICKHOUSE
+      - key: USE_CLICKHOUSE
         value: "false"
-      - name: USE_AGENT_FIXTURES
+      - key: USE_AGENT_FIXTURES
         value: "true"
-      - name: USE_TEMPORAL
+      - key: USE_TEMPORAL
         value: "false"
-      - name: DEMO_MODE
+      - key: DEMO_MODE
         value: "true"
-      - name: BASE_DOMAIN
+      - key: BASE_DOMAIN
         value: fastaisolution.com
-      - name: TEMPORAL_TASK_QUEUE
+      - key: TEMPORAL_TASK_QUEUE
         value: launch-store
-      - name: AUTH_SECRET
+      - key: AUTH_SECRET
         generateValue: true
-      - name: AUTH_TOKEN_TTL_MINUTES
+      - key: AUTH_TOKEN_TTL_MINUTES
         value: "10080"
-      - name: REQUIRE_AUTH_FOR_RUNS
+      - key: REQUIRE_AUTH_FOR_RUNS
         value: "true"
-      - name: CLICKHOUSE_HOST
+      - key: CLICKHOUSE_HOST
         sync: false
-      - name: CLICKHOUSE_PORT
+      - key: CLICKHOUSE_PORT
         value: "8443"
-      - name: CLICKHOUSE_USER
+      - key: CLICKHOUSE_USER
         sync: false
-      - name: CLICKHOUSE_PASSWORD
+      - key: CLICKHOUSE_PASSWORD
         sync: false
-      - name: CLICKHOUSE_DATABASE
+      - key: CLICKHOUSE_DATABASE
         sync: false
-      - name: CLICKHOUSE_SECURE
+      - key: CLICKHOUSE_SECURE
         value: "true"
-      - name: GOOGLE_API_KEY
+      - key: GOOGLE_API_KEY
         sync: false
-      - name: GEMINI_MODEL
+      - key: GEMINI_MODEL
         value: gemini-2.5-flash
-      - name: GOOGLE_GENAI_USE_VERTEXAI
+      - key: GOOGLE_GENAI_USE_VERTEXAI
         value: "false"
-      - name: GOOGLE_CLOUD_PROJECT
+      - key: GOOGLE_CLOUD_PROJECT
         sync: false
-      - name: GOOGLE_CLOUD_LOCATION
+      - key: GOOGLE_CLOUD_LOCATION
         sync: false
-      - name: NIMBLE_API_KEY
+      - key: NIMBLE_API_KEY
         sync: false
-      - name: NIMBLE_API_URL
+      - key: NIMBLE_API_URL
         sync: false
-      - name: DATADOG_API_KEY
+      - key: DATADOG_API_KEY
         sync: false
-      - name: DATADOG_SITE
+      - key: DATADOG_SITE
         sync: false
 
   - type: web
@@ -63,7 +63,7 @@ services:
     buildCommand: corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm build
     startCommand: corepack pnpm exec next start -H 0.0.0.0 -p $PORT
     envVars:
-      - name: NEXT_PUBLIC_USE_MOCKS
+      - key: NEXT_PUBLIC_USE_MOCKS
         value: "false"
-      - name: NEXT_PUBLIC_API_BASE_URL
+      - key: NEXT_PUBLIC_API_BASE_URL
         sync: false
