@@ -183,7 +183,9 @@ async def get_store(slug: str) -> StoreOutput:
         if run.slug == slug and run.store_url:
             return _fixture_store(slug=run.slug, run_id=run.run_id)
 
-    if slug == "magneticmount":
+    # In demo mode only, fall back to the magneticmount fixture so the dashboard
+    # has something to render before an agent run has populated the store.
+    if get_settings().demo_mode and slug == "magneticmount":
         return _fixture_store(slug=slug)
 
     raise HTTPException(status_code=404, detail="Store not found")

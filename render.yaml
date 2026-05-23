@@ -1,8 +1,12 @@
+# Render blueprint. autoDeploy is disabled on both services while we polish
+# the app locally. To turn deployment on later: set `autoDeploy: true` (or
+# trigger a manual deploy from the Render dashboard).
 services:
   - type: web
     name: auto-ecommerce-backend
     runtime: python
     plan: free
+    autoDeploy: false
     buildCommand: pip install uv && uv sync --extra temporal --frozen
     startCommand: uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -60,6 +64,7 @@ services:
     runtime: node
     plan: free
     rootDir: frontend
+    autoDeploy: false
     buildCommand: corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm build
     startCommand: corepack pnpm exec next start -H 0.0.0.0 -p $PORT
     envVars:
