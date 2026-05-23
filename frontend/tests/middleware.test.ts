@@ -14,4 +14,9 @@ describe("extractSubdomainSlug", () => {
   it("handles hosts with ports", () => {
     expect(extractSubdomainSlug("ergokeyboard.fastaisolution.com:3000")).toBe("ergokeyboard");
   });
+
+  it("extracts subdomain from .localhost for local dev", () => {
+    expect(extractSubdomainSlug("magneticphonemount.localhost:3000")).toBe("magneticphonemount");
+    expect(extractSubdomainSlug("localhost:3000")).toBeNull();
+  });
 });

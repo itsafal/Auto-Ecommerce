@@ -25,7 +25,11 @@ export default function DashboardPage() {
     if (!run) {
       return mockScore;
     }
-    return { ...mockScore, launch_score: run.launch_score, decision: run.decision };
+    return {
+      ...mockScore,
+      launch_score: run.launch_score ?? mockScore.launch_score,
+      decision: run.decision ?? mockScore.decision
+    };
   }, [run]);
 
   useEffect(() => {
@@ -115,9 +119,13 @@ export default function DashboardPage() {
           <p className={styles.eyebrow}>Operator dashboard</p>
           <h1>Live Agent Run</h1>
         </div>
-        <a href={visibleRun.store_url} className={styles.storeLink}>
-          {visibleRun.store_url.replace("https://", "")}
-        </a>
+        {visibleRun.store_url ? (
+          <a href={visibleRun.store_url} className={styles.storeLink}>
+            {visibleRun.store_url.replace(/^https?:\/\//, "")}
+          </a>
+        ) : (
+          <span className={styles.storeLink}>pending...</span>
+        )}
       </header>
 
       <section className={styles.controlPanel}>
@@ -165,7 +173,11 @@ export default function DashboardPage() {
           <LaunchScore score={score} />
           <section className={styles.finalUrl}>
             <h2>Final Store URL</h2>
-            <a href={visibleRun.store_url}>{visibleRun.store_url}</a>
+            {visibleRun.store_url ? (
+              <a href={visibleRun.store_url}>{visibleRun.store_url}</a>
+            ) : (
+              <p>Provisioning storefront...</p>
+            )}
           </section>
         </aside>
       </div>

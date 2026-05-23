@@ -1,7 +1,8 @@
 import type { LaunchScoreBreakdown } from "@/lib/mock-data";
 import styles from "./LaunchScore.module.css";
 
-const formatScore = (value: number) => value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+const formatScore = (value: number | null | undefined) =>
+  value == null ? "—" : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 
 export function LaunchScore({ score }: { score: LaunchScoreBreakdown }) {
   const rows = [
@@ -16,7 +17,7 @@ export function LaunchScore({ score }: { score: LaunchScoreBreakdown }) {
       <div className={styles.header}>
         <div>
           <h2>Launch Score</h2>
-          <p>Final decision: {score.decision}</p>
+          <p>Final decision: {score.decision ?? "pending"}</p>
         </div>
         <strong>{formatScore(score.launch_score)}</strong>
       </div>
