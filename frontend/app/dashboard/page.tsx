@@ -9,7 +9,17 @@ import { getCurrentUser, getRun, getRunEvents, triggerAgentRun, useMockMode } fr
 import { type AgentEvent, type LaunchRun, mockEvents, mockRun, mockScore } from "@/lib/mock-data";
 import styles from "./page.module.css";
 
-const demoProducts = ["Magnetic Phone Mount", "Ergo Keyboard", "Portable Blender"];
+const demoProducts = [
+  "Magnetic Phone Mount",
+  "Portable Power Station",
+  "Red Light Therapy Mask",
+  "Mini Portable Projector",
+  "Smart Ring Fitness Tracker",
+  "Portable Ice Bath",
+  "Smart Desk Lamp",
+  "Ergo Keyboard",
+  "Portable Blender"
+];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -136,6 +146,20 @@ export default function DashboardPage() {
             value={productName}
             onChange={(event) => setProductName(event.target.value)}
           />
+          <div className={styles.chips}>
+            {demoProducts.map((product) => (
+              <button
+                type="button"
+                key={product}
+                className={styles.chip}
+                data-active={product === productName}
+                onClick={() => setProductName(product)}
+                disabled={isTriggering}
+              >
+                {product}
+              </button>
+            ))}
+          </div>
           <datalist id="demo-products">
             {demoProducts.map((product) => (
               <option key={product} value={product} />
