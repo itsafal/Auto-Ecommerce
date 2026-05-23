@@ -9,11 +9,45 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 import uuid
 
 from backend.db.memory_store import MemoryStore, get_memory_store
+
+BUSINESS_COLUMNS = [
+    "id", "product_name", "slug", "category", "launch_time", "store_url",
+    "status", "margin_estimate", "supplier_id", "supplier_name",
+    "trend_score", "launch_score", "bias_score", "created_at",
+]
+
+TREND_SIGNAL_COLUMNS = [
+    "id", "product_name", "category", "source",
+    "trend_score", "search_volume", "social_mentions", "detected_at",
+]
+
+
+def _parse_dt(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str) and value:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return datetime.now(timezone.utc)
+
+
+def _row_from_dict(record: dict, columns: list[str], defaults: dict | None = None) -> list:
+    """Project a dict into an ordered row, filling missing keys from defaults."""
+    defaults = defaults or {}
+    row = []
+    for col in columns:
+        if col in record and record[col] is not None:
+            row.append(record[col])
+        elif col in defaults:
+            row.append(defaults[col])
+        else:
+            row.append(None)
+    return row
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -48,9 +82,10 @@ class ClickHouseClient:
                 self._client.command(stmt)
 
     def write_run(self, run_id, product_name, slug, status="started", temporal_workflow_id=""):
+        rid = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
         self._client.insert(
             "launch_runs",
-            [[run_id, temporal_workflow_id, product_name, slug, status, 0.0, "", ""]],
+            [[rid, temporal_workflow_id, product_name, slug, status, 0.0, "", ""]],
             column_names=[
                 "run_id", "temporal_workflow_id", "product_name", "slug",
                 "status", "launch_score", "decision", "store_url",
@@ -84,9 +119,11 @@ class ClickHouseClient:
         )
 
     def write_event(self, run_id, agent_name, event_type, message="", payload=None, business_id=None, timestamp=None):
+        rid = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
+        bid = uuid.UUID(business_id) if isinstance(business_id, str) else business_id
         self._client.insert(
             "agent_events",
-            [[run_id, business_id, agent_name, event_type, message, json.dumps(payload or {})]],
+            [[rid, bid, agent_name, event_type, message, json.dumps(payload or {})]],
             column_names=["run_id", "business_id", "agent_name", "event_type", "message", "payload"],
         )
         return {
@@ -103,8 +140,25 @@ class ClickHouseClient:
         )
 
     def write_business(self, business):
-        # Caller passes a complete row; we just insert.
-        self._client.insert("businesses", [business])
+        record = dict(business)
+        record.setdefault("id", str(uuid.uuid4()))
+        record.setdefault("slug", "")
+        record.setdefault("category", "")
+        record.setdefault("store_url", "")
+        record.setdefault("supplier_id", "")
+        record.setdefault("supplier_name", "")
+        record.setdefault("status", "active")
+        record.setdefault("margin_estimate", 0.0)
+        record.setdefault("trend_score", 0.0)
+        record.setdefault("launch_score", 0.0)
+        record.setdefault("bias_score", 0.0)
+        record["launch_time"] = _parse_dt(record.get("launch_time"))
+        record["created_at"] = _parse_dt(record.get("created_at"))
+        # Cast UUID strings to uuid.UUID objects ClickHouse expects.
+        if isinstance(record["id"], str):
+            record["id"] = uuid.UUID(record["id"])
+        row = _row_from_dict(record, BUSINESS_COLUMNS)
+        self._client.insert("businesses", [row], column_names=BUSINESS_COLUMNS)
         return business
 
     def list_businesses(self, status=None):
@@ -119,7 +173,18 @@ class ClickHouseClient:
         return list(rows)
 
     def write_trend_signal(self, signal):
-        self._client.insert("trend_signals", [signal])
+        record = dict(signal)
+        record.setdefault("id", str(uuid.uuid4()))
+        record.setdefault("category", "")
+        record.setdefault("source", "")
+        record.setdefault("trend_score", 0.0)
+        record.setdefault("search_volume", 0)
+        record.setdefault("social_mentions", 0)
+        record["detected_at"] = _parse_dt(record.get("detected_at"))
+        if isinstance(record["id"], str):
+            record["id"] = uuid.UUID(record["id"])
+        row = _row_from_dict(record, TREND_SIGNAL_COLUMNS)
+        self._client.insert("trend_signals", [row], column_names=TREND_SIGNAL_COLUMNS)
         return signal
 
     def list_trend_signals(self, limit=50):
@@ -131,9 +196,11 @@ class ClickHouseClient:
         )
 
     def write_relationship(self, from_business_id, to_business_id, relationship_type, weight, reason=""):
+        f = uuid.UUID(from_business_id) if isinstance(from_business_id, str) else from_business_id
+        t = uuid.UUID(to_business_id) if isinstance(to_business_id, str) else to_business_id
         self._client.insert(
             "business_relationships",
-            [[from_business_id, to_business_id, relationship_type, float(weight), reason]],
+            [[f, t, relationship_type, float(weight), reason]],
             column_names=["from_business_id", "to_business_id", "relationship_type", "weight", "reason"],
         )
 
