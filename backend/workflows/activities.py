@@ -370,6 +370,23 @@ def make_event(
     )
 
 
+def _persist_trend_signal(output: ResearchOutput, source: str) -> ResearchOutput:
+    """Write a trend_signals row capturing this research as a time-series point."""
+    from backend.store import run_store
+
+    run_store.record_trend_signal(
+        {
+            "product_name": output.product_name,
+            "category": output.category or "",
+            "source": source,
+            "trend_score": float(output.trend_score or 0.0),
+            "search_volume": int(output.search_volume or 0),
+            "social_mentions": int(output.social_mentions or 0),
+        }
+    )
+    return output
+
+
 @activity.defn
 async def research_activity(product_name: str) -> ResearchOutput:
     # 1. Real market data from Nimble SERP (organic + shopping listings).
@@ -412,7 +429,10 @@ Return JSON only (numbers must reflect the SERP data above, not hallucinated):
                     "high": nimble["price_high"],
                 }
             try:
-                return ResearchOutput(product_name=product_name, **generated)
+                return _persist_trend_signal(
+                    ResearchOutput(product_name=product_name, **generated),
+                    source="nimble_serp",
+                )
             except Exception:
                 pass
 
@@ -433,21 +453,27 @@ Product: {product_name}
     generated = await _gemini_json(prompt)
     if generated:
         try:
-            return ResearchOutput(product_name=product_name, **generated)
+            return _persist_trend_signal(
+                ResearchOutput(product_name=product_name, **generated),
+                source="gemini",
+            )
         except Exception:
             pass
 
     # 4. Last resort: curated fixture profile.
     profile = _product_profile(product_name)
-    return ResearchOutput(
-        product_name=product_name,
-        category=profile["category"],
-        trend_score=profile["trend_score"],
-        search_volume=profile["search_volume"],
-        social_mentions=profile["social_mentions"],
-        competitor_summary=profile["summary"],
-        price_range={"low": profile["low"], "high": profile["high"]},
-        confidence=0.82,
+    return _persist_trend_signal(
+        ResearchOutput(
+            product_name=product_name,
+            category=profile["category"],
+            trend_score=profile["trend_score"],
+            search_volume=profile["search_volume"],
+            social_mentions=profile["social_mentions"],
+            competitor_summary=profile["summary"],
+            price_range={"low": profile["low"], "high": profile["high"]},
+            confidence=0.82,
+        ),
+        source="fixture",
     )
 
 
