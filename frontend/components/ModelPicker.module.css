@@ -1,0 +1,77 @@
+.card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.winner {
+  font-size: 0.78rem;
+  color: rgba(120, 200, 160, 0.9);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.select {
+  flex: 1;
+  background: rgba(15, 15, 18, 0.7);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.label {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.status {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.5);
+  min-height: 1em;
+}
+
+.error {
+  color: rgba(255, 130, 130, 0.9);
+}
+
+.success {
+  color: rgba(120, 200, 160, 0.9);
+}
