@@ -6,24 +6,33 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.coverage
+htmlcov/
+build/
 
 # uv
 uv.lock
 
-# Env
+# Env / local secrets
 .env
-.env.local
+.env.*
+!.env.example
 
 # OS
 .DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
 .idea/
 
-# Node
+# Node / Next.js
 node_modules/
 .next/
 .pnpm-store/
+out/
 dist/
 coverage/
+
+# Logs
+*.log

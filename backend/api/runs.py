@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, HTTPException
+
+from backend.schemas import (
+    AgentEventsResponse,
+    LaunchRequest,
+    LaunchRun,
+    LaunchTriggerResponse,
+    RunStatus,
+    WorkflowInput,
+)
+from backend.settings import get_settings
+from backend.store import run_store
+from backend.workflows.activities import execute_fixture_launch, slugify_product
+
+router = APIRouter(prefix="/api", tags=["runs"])
+
+
+async def _start_launch(request: LaunchRequest) -> LaunchTriggerResponse:
+    settings = get_settings()
+    run_id = uuid4()
+    temporal_workflow_id = f"launch-store-{run_id}"
+    slug = slugify_product(request.product_name)
+
+    run = LaunchRun(
+        run_id=run_id,
+        temporal_workflow_id=temporal_workflow_id,
+        product_name=request.product_name,
+        slug=slug,
+        status=RunStatus.started,
+    )
+    run_store.upsert_run(run)
+
+    workflow_input = WorkflowInput(
+        run_id=run_id,
+        product_name=request.product_name,
+        temporal_workflow_id=temporal_workflow_id,
+    )
+
+    if settings.use_temporal:
+        try:
+            from temporalio.client import Client
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="Temporal is enabled but temporalio is not installed.") from exc
+
+        client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
+        await client.start_workflow(
+            "LaunchStoreWorkflow",
+            workflow_input,
+            id=temporal_workflow_id,
+            task_queue=settings.temporal_task_queue,
+        )
+    else:
+        result = await execute_fixture_launch(workflow_input)
+        run_store.upsert_run(result.run)
+        run_store.set_events(run_id, result.events)
+
+    return LaunchTriggerResponse(
+        run_id=run_id,
+        status=RunStatus.started,
+        temporal_workflow_id=temporal_workflow_id,
+    )
+
+
+@router.post("/demo/trigger", response_model=LaunchTriggerResponse)
+async def demo_trigger(request: LaunchRequest | None = None) -> LaunchTriggerResponse:
+    return await _start_launch(request or LaunchRequest())
+
+
+@router.post("/launch-store", response_model=LaunchTriggerResponse)
+async def launch_store(request: LaunchRequest) -> LaunchTriggerResponse:
+    return await _start_launch(request)
+
+
+@router.get("/runs/{run_id}", response_model=LaunchRun)
+async def get_run(run_id: UUID) -> LaunchRun:
+    run = run_store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
+
+
+@router.get("/runs/{run_id}/events", response_model=AgentEventsResponse)
+async def get_run_events(run_id: UUID) -> AgentEventsResponse:
+    if run_store.get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return AgentEventsResponse(run_id=run_id, events=run_store.get_events(run_id))
+
+
+@router.get("/stores")
+async def get_stores() -> dict[str, list[LaunchRun]]:
+    runs = [run for run in run_store._runs.values() if run.store_url]
+    return {"stores": runs}
+
+
+@router.get("/agents/status")
+async def get_agents_status() -> dict[str, str]:
+    return {"status": "ok", "mode": "fixture"}
