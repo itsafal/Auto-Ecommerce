@@ -57,3 +57,13 @@ down:
         kill $pids 2>/dev/null || true
       fi
     done
+
+    sleep 1
+
+    for port in {{backend_port}} {{frontend_port}}; do
+      pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+      if [[ -n "$pids" ]]; then
+        echo "Force stopping processes on port $port: $pids"
+        kill -9 $pids 2>/dev/null || true
+      fi
+    done
