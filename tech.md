@@ -422,15 +422,31 @@ Build in this order:
 
 1. FastAPI `/api/demo/trigger`
 2. Temporal `LaunchStoreWorkflow` and Render worker shape
-3. Google ADK agent wrappers with validated Gemini JSON outputs
-4. ClickHouse schema and inserts
-5. Next.js micro-store template
-6. Dashboard run timeline
-7. Render deployment
-8. Datadog traces and metrics
-9. Render cron trend monitor
-10. Optional live Nimble path
-11. Optional GoDaddy API cleanup
+3. Pydantic schemas for all agent inputs, outputs, and run events
+4. Google ADK agent wrappers with validated Gemini JSON outputs
+5. ClickHouse schema and inserts
+6. Next.js micro-store template
+7. Dashboard run timeline
+8. Render deployment
+9. Datadog traces and metrics
+10. Render cron trend monitor
+11. Optional live Nimble path
+12. Optional GoDaddy API cleanup
+
+## Required Team Skills
+
+- FastAPI backend development
+- Temporal workflows and worker setup
+- Google ADK agent and tool design
+- Gemini prompting and structured JSON output handling
+- Pydantic schema validation for agent outputs and run events
+- ClickHouse schema design, inserts, and analytics queries
+- Next.js storefront and dashboard development
+- Render deployment, workers, cron jobs, and environment variables
+- Datadog tracing, metrics, and dashboard setup
+- Nimble integration and cached demo fixtures
+- Wildcard DNS and subdomain routing
+- Demo engineering with deterministic fallbacks
 
 ## Final Stack Summary
 
@@ -440,6 +456,7 @@ Build in this order:
 | Backend | Python + FastAPI |
 | Async workflows | Temporal |
 | Agents | Google ADK + Gemini |
+| Agent schemas | Pydantic |
 | Trend data | Nimble |
 | Demo fallback | Cached fixtures with `DEMO_MODE=true` |
 | Database | ClickHouse Cloud |
