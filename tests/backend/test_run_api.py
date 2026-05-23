@@ -121,6 +121,35 @@ def test_cors_allows_local_dashboard_preflight() -> None:
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
 
+def test_trigger_requires_auth_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    monkeypatch.setenv("REQUIRE_AUTH_FOR_RUNS", "true")
+    client = TestClient(app)
+
+    response = client.post("/api/demo/trigger", json={"product_name": "Magnetic Phone Mount"})
+
+    assert response.status_code == 401
+
+
+def test_trigger_accepts_bearer_token_when_auth_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    monkeypatch.setenv("REQUIRE_AUTH_FOR_RUNS", "true")
+    monkeypatch.setenv("AUTH_SECRET", "test-secret")
+    client = TestClient(app)
+    signup = client.post(
+        "/api/auth/signup",
+        json={"email": "owner@fastaisolution.com", "password": "correct horse battery", "full_name": "Store Owner"},
+    ).json()
+
+    response = client.post(
+        "/api/demo/trigger",
+        json={"product_name": "Magnetic Phone Mount"},
+        headers={"Authorization": f"Bearer {signup['access_token']}"},
+    )
+
+    assert response.status_code == 200
+
+
 def test_temporal_result_persistence_updates_run_and_events(monkeypatch) -> None:
     monkeypatch.setenv("USE_TEMPORAL", "false")
     client = TestClient(app)

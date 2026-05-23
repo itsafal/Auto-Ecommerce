@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 
+from backend.api.auth import get_authenticated_user
 from backend.schemas import (
     AgentEventsResponse,
     LaunchRequest,
@@ -36,8 +37,11 @@ def _fixture_store(slug: str, run_id: UUID | None = None) -> StoreOutput:
     )
 
 
-async def _start_launch(request: LaunchRequest) -> LaunchTriggerResponse:
+async def _start_launch(request: LaunchRequest, authorization: str | None = None) -> LaunchTriggerResponse:
     settings = get_settings()
+    if settings.require_auth_for_runs:
+        get_authenticated_user(authorization)
+
     run_id = uuid4()
     temporal_workflow_id = f"launch-store-{run_id}"
     slug = slugify_product(request.product_name)
@@ -104,13 +108,19 @@ async def _persist_temporal_result(handle, run_id: UUID) -> None:
 
 
 @router.post("/demo/trigger", response_model=LaunchTriggerResponse)
-async def demo_trigger(request: LaunchRequest | None = None) -> LaunchTriggerResponse:
-    return await _start_launch(request or LaunchRequest())
+async def demo_trigger(
+    request: LaunchRequest | None = None,
+    authorization: str | None = Header(default=None),
+) -> LaunchTriggerResponse:
+    return await _start_launch(request or LaunchRequest(), authorization=authorization)
 
 
 @router.post("/launch-store", response_model=LaunchTriggerResponse)
-async def launch_store(request: LaunchRequest) -> LaunchTriggerResponse:
-    return await _start_launch(request)
+async def launch_store(
+    request: LaunchRequest,
+    authorization: str | None = Header(default=None),
+) -> LaunchTriggerResponse:
+    return await _start_launch(request, authorization=authorization)
 
 
 @router.get("/runs/{run_id}", response_model=LaunchRun)
