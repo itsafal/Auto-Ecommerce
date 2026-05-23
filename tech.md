@@ -26,7 +26,7 @@ FastAPI run orchestrator
 Temporal workflow
         |
         v
-Claude SDK agents
+Gemini agents via Google ADK
         |
         v
 Launch score + store config
@@ -92,7 +92,7 @@ Responsibilities:
 
 - Run the full launch workflow asynchronously.
 - Execute agent steps in order.
-- Retry transient failures from Claude, Nimble, supplier lookup, ClickHouse, or
+- Retry transient failures from Gemini/ADK, Nimble, supplier lookup, ClickHouse, or
   store creation.
 - Persist workflow progress independently of API server restarts.
 - Support manual demo triggers and scheduled trend-triggered launches.
@@ -159,10 +159,23 @@ Temporal hosting:
 
 ## Agents
 
-**Choice:** Claude SDK for all agents.
+**Choice:** Gemini for all agents, built with Google ADK.
 
-Use Claude as the primary agent runtime. Keep Gemini fallback out of the first
-build unless there is extra time.
+Use Google ADK as the agent framework and Gemini as the model runtime. Temporal
+owns durable workflow orchestration; ADK owns agent definitions, tools, prompts,
+state/callbacks, and structured agent behavior.
+
+Default model:
+
+- `gemini-flash-latest` for the hackathon build
+- Upgrade specific agents to a stronger Gemini model only if quality requires it
+
+Implementation rule:
+
+- Each Temporal activity calls one ADK agent or ADK-backed tool.
+- Do not use ADK Workflow API for this build; Temporal is the workflow engine.
+- Keep ADK agents focused and stateless where possible. Persist durable run state
+  in ClickHouse and Temporal, not only inside agent memory.
 
 Agents:
 
@@ -341,7 +354,9 @@ Recommended services:
 
 Environment variables:
 
-- `ANTHROPIC_API_KEY`
+- `GOOGLE_API_KEY` or Vertex/Gemini Enterprise credentials
+- `GOOGLE_CLOUD_PROJECT`
+- `GOOGLE_CLOUD_LOCATION=global`
 - `NIMBLE_API_KEY`
 - `CLICKHOUSE_HOST`
 - `CLICKHOUSE_USER`
@@ -361,7 +376,7 @@ For demo fallback:
 - Set `DEMO_MODE=true` if external APIs are unstable.
 - Use cached Nimble response.
 - Use cached supplier response.
-- Use deterministic Claude-like fixture outputs if needed.
+- Use deterministic Gemini/ADK-like fixture outputs if needed.
 
 ## Scheduler
 
@@ -406,15 +421,16 @@ Decision:
 Build in this order:
 
 1. FastAPI `/api/demo/trigger`
-2. Claude SDK agent wrappers with validated JSON outputs
-3. ClickHouse schema and inserts
-4. Next.js micro-store template
-5. Dashboard run timeline
-6. Render deployment
-7. Datadog traces and metrics
-8. Render cron trend monitor
-9. Optional live Nimble path
-10. Optional GoDaddy API cleanup
+2. Temporal `LaunchStoreWorkflow` and Render worker shape
+3. Google ADK agent wrappers with validated Gemini JSON outputs
+4. ClickHouse schema and inserts
+5. Next.js micro-store template
+6. Dashboard run timeline
+7. Render deployment
+8. Datadog traces and metrics
+9. Render cron trend monitor
+10. Optional live Nimble path
+11. Optional GoDaddy API cleanup
 
 ## Final Stack Summary
 
@@ -423,7 +439,7 @@ Build in this order:
 | Frontend | Next.js + React + Tailwind CSS |
 | Backend | Python + FastAPI |
 | Async workflows | Temporal |
-| Agents | Claude SDK |
+| Agents | Google ADK + Gemini |
 | Trend data | Nimble |
 | Demo fallback | Cached fixtures with `DEMO_MODE=true` |
 | Database | ClickHouse Cloud |
