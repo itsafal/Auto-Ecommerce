@@ -21,7 +21,7 @@
 7. **Datadog dashboard lights up** — shows agent activity timeline, store health, API call traces, order pipeline
 8. **Bias mechanism surfaces** — system shows a "near-miss" from a previously failed category that's now worth retrying (knowledge compounding)
 9. **Launch decision score appears** — dashboard shows trend score, margin score, supplier confidence, compliance risk, and final launch/no-launch decision
-10. **Run timeline persists** — every agent event is saved under one `run_id`, visible in the dashboard, ClickHouse, and Datadog traces
+10. **Temporal workflow persists the run** — every long-running agent step is a Temporal activity under one `run_id`, visible in the dashboard, ClickHouse, and Datadog traces
 
 Demo runtime: ~7 minutes. Everything is scripted to trigger live, with pre-warmed state as fallback.
 
@@ -33,12 +33,15 @@ Demo runtime: ~7 minutes. Everything is scripted to trigger live, with pre-warme
 [Demo Trigger / Nimble Trend Signal]
               |
               v
-[Run Orchestrator: run_id, status, events, fallbacks]
+[FastAPI Run API: create run_id, start Temporal workflow]
               |
               v
-[Research] -> [Buyer] -> [Legal] -> [Advertising] -> [Store]
-              |          |          |             |
-              v          v          v             v
+[Temporal LaunchStoreWorkflow: retries, durable state, fallbacks]
+              |
+              v
+[Research Activity] -> [Buyer Activity] -> [Legal Activity] -> [Advertising Activity] -> [Store Activity]
+              |               |                 |                       |
+              v               v                 v                       v
         [Launch Scoring + Supplier Confidence + Risk Flags]
               |
               v
@@ -47,11 +50,60 @@ Demo runtime: ~7 minutes. Everything is scripted to trigger live, with pre-warme
 
 **Backend**: Python + FastAPI  
 **Frontend**: Next.js (React) — single template, AI populates content; subdomain-routed  
-**Agents**: Claude SDK (claude-opus-4-7 with adaptive thinking) + Gemini fallback  
+**Async orchestration**: Temporal — durable workflows, activity retries, worker execution  
+**Agents**: Google ADK with Gemini for all agents  
 **DB**: ClickHouse Cloud — columnar storage for business nodes, agent logs, performance metrics  
 **Scraping**: Nimble API (primary trend detection) + Scrapling (supplemental)  
 **Observability**: Datadog APM + custom dashboards  
 **Domain**: `fastaisolution.com` via GoDaddy — each store gets `{product-slug}.fastaisolution.com`  
+**Deployment**: Render for frontend, FastAPI backend, Temporal worker, and scheduled trend cron  
+
+---
+
+## Temporal Async Workflow Architecture
+
+FastAPI should not hold a single HTTP request open while multiple agents call Gemini through ADK, Nimble, supplier sources, ClickHouse, and store creation. FastAPI creates a `run_id`, starts a Temporal workflow, and immediately returns the `run_id` to the dashboard.
+
+### Workflow shape:
+
+```text
+LaunchStoreWorkflow(run_id, product_input)
+        |
+        v
+ResearchActivity
+        |
+        v
+BuyerActivity
+        |
+        v
+LegalRiskActivity
+        |
+        v
+AdvertisingActivity
+        |
+        v
+ScoreLaunchActivity
+        |
+        v
+CreateStoreActivity
+```
+
+### Why Temporal is load-bearing:
+
+- Agent runs survive FastAPI restarts.
+- Gemini/ADK, Nimble, and supplier calls get timeout and retry policies.
+- Each agent step is visible as a workflow activity.
+- The dashboard can follow progress by `run_id`.
+- Demo fallback usage is recorded as a real workflow event.
+- Scheduled trend monitoring and manual UI triggers use the same workflow path.
+
+### Temporal rules:
+
+- Workflow code only orchestrates. It must stay deterministic.
+- Gemini/ADK agent calls, Nimble, ClickHouse, Datadog, supplier lookup, image generation, and store creation happen inside activities.
+- Each activity writes `agent_events` rows before and after execution.
+- Each activity emits Datadog tags for `run_id`, `agent`, `product_slug`, and `demo_mode`.
+- Use Temporal Cloud for hackathon deployment if possible. Use local Temporal via Docker Compose for development.
 
 ---
 
@@ -154,6 +206,7 @@ CREATE TABLE trend_signals (
 -- One record per launch attempt/demo run
 CREATE TABLE launch_runs (
   run_id UUID,
+  temporal_workflow_id String,
   product_name String,
   slug String,
   status String,
@@ -166,6 +219,8 @@ CREATE TABLE launch_runs (
 -- Timeline events shown in dashboard and correlated with Datadog traces
 CREATE TABLE agent_events (
   run_id UUID,
+  temporal_workflow_id Nullable(String),
+  temporal_activity_name Nullable(String),
   business_id Nullable(UUID),
   agent_name String,
   event_type String,
@@ -193,30 +248,35 @@ CREATE TABLE business_relationships (
 
 ### Dipesh — Agent Orchestration & Backend Core
 **Time**: Full 4 hours  
-**Deliverable**: Working FastAPI server with CEO orchestrator + Research + Buyer agents
+**Deliverable**: Working FastAPI server that starts Temporal workflows, plus Google ADK/Gemini agent activities
 
 #### Tasks:
-1. **(Hour 1)** Set up FastAPI project structure, define agent interfaces, wire Claude SDK
-   - `POST /api/launch-store` — main endpoint that triggers the full loop
-   - `POST /api/demo/trigger` — deterministic demo path that creates a `run_id`
+1. **(Hour 1)** Set up FastAPI project structure, define agent interfaces, wire Google ADK + Gemini, wire Temporal client
+   - `POST /api/launch-store` — creates a `run_id`, starts `LaunchStoreWorkflow`, returns immediately
+   - `POST /api/demo/trigger` — deterministic demo path that creates a `run_id` and starts the same Temporal workflow
    - `GET /api/runs/{run_id}` — current status, launch score, store URL, errors
    - `GET /api/runs/{run_id}/events` — agent timeline for dashboard + Datadog correlation
    - `GET /api/stores` — list all active businesses from ClickHouse
    - `GET /api/agents/status` — Datadog-instrumented agent health
-2. **(Hour 1-2)** CEO Orchestrator agent — takes a product name, creates run state, routes to sub-agents, assembles final store config
-3. **(Hour 2-3)** Research Agent — calls Nimble API, parses trend data, writes to ClickHouse `trend_signals`
-4. **(Hour 3-4)** Buyer Agent — queries 2-3 supplier sources (AliExpress via scraping, or mock supplier API), picks winner using supplier confidence, writes to ClickHouse `businesses`
-5. **(Hour 4)** Add launch scoring + fallback fixtures — trend, margin, supplier confidence, compliance risk; cached Nimble/supplier/agent outputs for `DEMO_MODE=true`
-6. **(Hour 4)** Wire Datadog traces — `ddtrace` decorators on each agent call, custom metric for `agent.decisions` count, tags for `run_id`, `agent`, and `product_slug`
+2. **(Hour 1-2)** Temporal workflow + worker — `LaunchStoreWorkflow` coordinates Research → Buyer → Legal → Advertising → Score → Store
+3. **(Hour 2-3)** Research Activity — calls Nimble API, parses trend data, writes to ClickHouse `trend_signals`
+4. **(Hour 2-3)** Buyer Activity — queries 2-3 supplier sources (AliExpress via scraping, or mock supplier API), picks winner using supplier confidence
+5. **(Hour 3-4)** Launch scoring + Store Activity — calculates score, writes `businesses`, creates store config
+6. **(Hour 4)** Add fallback fixtures — trend, margin, supplier confidence, compliance risk; cached Nimble/supplier/agent outputs for `DEMO_MODE=true`
+7. **(Hour 4)** Wire Datadog traces — `ddtrace` decorators on each activity, custom metric for `agent.decisions` count, tags for `run_id`, `agent`, `product_slug`, and `temporal_workflow_id`
 
 #### Key files:
 ```
 backend/
   main.py              # FastAPI app
+  workflows/
+    launch_store.py    # Temporal workflow definition
+    worker.py          # Temporal worker process for Render background worker
+    activities.py      # Temporal activities that call agents/tools
   agents/
-    orchestrator.py    # CEO agent
-    research.py        # Research agent (Nimble integration)
-    buyer.py           # Buyer agent (supplier sourcing)
+    orchestrator.py    # ADK/Gemini CEO agent
+    research.py        # ADK/Gemini Research agent (Nimble integration)
+    buyer.py           # ADK/Gemini Buyer agent (supplier sourcing)
   db/
     clickhouse.py      # ClickHouse client + insert helpers
   observability/
@@ -227,20 +287,61 @@ backend/
   schemas.py           # Pydantic contracts for all agent outputs
 ```
 
-#### Claude SDK pattern for agents:
+#### Temporal SDK pattern:
 ```python
-import anthropic
-client = anthropic.Anthropic()
+from temporalio import workflow
 
-def run_research_agent(product_name: str) -> dict:
-    response = client.messages.create(
-        model="claude-opus-4-7",
-        max_tokens=2048,
-        thinking={"type": "adaptive"},
-        system="You are a market research agent...",
-        messages=[{"role": "user", "content": f"Research: {product_name}"}]
-    )
-    return parse_research_output(response)
+@workflow.defn
+class LaunchStoreWorkflow:
+    @workflow.run
+    async def run(self, run_id: str, product_input: dict) -> dict:
+        research = await workflow.execute_activity(
+            "research_activity",
+            {"run_id": run_id, "product_input": product_input},
+            start_to_close_timeout=timedelta(seconds=60),
+        )
+        buyer = await workflow.execute_activity(
+            "buyer_activity",
+            {"run_id": run_id, "research": research},
+            start_to_close_timeout=timedelta(seconds=60),
+        )
+        risk = await workflow.execute_activity(
+            "legal_risk_activity",
+            {"run_id": run_id, "research": research},
+            start_to_close_timeout=timedelta(seconds=60),
+        )
+        advertising = await workflow.execute_activity(
+            "advertising_activity",
+            {"run_id": run_id, "research": research, "buyer": buyer},
+            start_to_close_timeout=timedelta(seconds=60),
+        )
+        return await workflow.execute_activity(
+            "create_store_activity",
+            {
+                "run_id": run_id,
+                "research": research,
+                "buyer": buyer,
+                "risk": risk,
+                "advertising": advertising,
+            },
+            start_to_close_timeout=timedelta(seconds=60),
+        )
+```
+
+#### Google ADK pattern for agents:
+```python
+from google.adk.agents import Agent
+
+research_agent = Agent(
+    name="research_agent",
+    model="gemini-flash-latest",
+    instruction=(
+        "You are a market research agent for ecommerce product launches. "
+        "Return validated JSON with trend_score, competitor_summary, "
+        "price_range, demand_summary, and confidence."
+    ),
+    tools=[],
+)
 ```
 
 #### Buyer agent supplier confidence output:
@@ -270,16 +371,20 @@ launch_score = (
 
 ### Safal — Full-Stack Store Template + Infra + Deployment
 **Time**: Full 4 hours  
-**Deliverable**: Live Next.js store that spins up via API call; deployed and accessible by URL
+**Deliverable**: Live Next.js store + dashboard, Render deployment, Temporal worker connected
 
 #### Tasks:
 1. **(Hour 1)** Next.js store template — single product landing page with slots for: product name, description, price, hero image, CTA button. Tailwind CSS.
-2. **(Hour 1-2)** `POST /api/stores/create` endpoint — accepts store config JSON, calls GoDaddy API to provision `{slug}.fastaisolution.com`, returns live URL
+2. **(Hour 1-2)** Dashboard control room — Trigger Agent Run button, product input, real-time agent timeline, launch score panel, final store URL
+   - Trigger calls `POST /api/demo/trigger` or `POST /api/launch-store`
+   - UI receives `run_id`
+   - UI polls `GET /api/runs/{run_id}` and `GET /api/runs/{run_id}/events` every 1-2 seconds
+3. **(Hour 2)** `POST /api/stores/create` activity helper — accepts store config JSON, returns live URL
    - Strategy: Wildcard DNS `*.fastaisolution.com` pre-set in GoDaddy (one-time, manual); API call is supplemental for clean records
    - Next.js middleware reads `host` header → routes to correct store template by slug
-3. **(Hour 2-3)** ClickHouse integration — Python client setup, schema creation script, insert/query helpers
-4. **(Hour 3)** Data pipeline: Nimble webhook or polling → normalize trend data → ClickHouse insert → trigger agent loop
-5. **(Hour 4)** Deployment — Vercel for frontend, Railway/Render/Docker for FastAPI backend. Confirm live URLs work.
+4. **(Hour 2-3)** ClickHouse integration — Python client setup, schema creation script, insert/query helpers
+5. **(Hour 3)** Data pipeline: Nimble webhook or polling → normalize trend data → start Temporal `LaunchStoreWorkflow`
+6. **(Hour 4)** Deployment — Render for Next.js frontend, FastAPI backend, Temporal worker, and cron job. Confirm live URLs work.
 
 #### Key files:
 ```
@@ -288,10 +393,12 @@ frontend/
     store/[id]/
       page.tsx         # Dynamic store page pulling config
     dashboard/
-      page.tsx         # Internal admin view (agent logs, stores)
+      page.tsx         # Internal admin view (trigger, timeline, launch score, stores)
   components/
     StoreTemplate.tsx  # The lockable storefront component
     AgentFeed.tsx      # Live agent activity stream
+    AgentTimeline.tsx  # Visual Research -> Buyer -> Legal -> Advertising -> Store pipeline
+    LaunchScore.tsx    # Score breakdown and launch/no-launch decision
 
 backend/
   db/
@@ -318,22 +425,22 @@ backend/
 
 ### Deepali — Agent Design, A2A Pipelines & Multimodal
 **Time**: Full 4 hours  
-**Deliverable**: Legal Agent + Advertising Agent + product image sourcing; A2A message protocol
+**Deliverable**: Legal Agent + Advertising Agent + product image sourcing; Temporal activity contracts
 
 #### Tasks:
-1. **(Hour 1)** Design and document the A2A message protocol — how agents communicate (input/output schemas for each agent type)
-2. **(Hour 1-2)** Legal Agent — given product name and category, returns ecommerce risk flags, not formal legal advice: trademark risk, regulated product risk, import/shipping restrictions, and ad claim risk. Uses Claude with a legal reasoning prompt.
-3. **(Hour 2-3)** Advertising Agent — generates product name, tagline, short ad copy, and hero image prompt using Claude. Optionally call DALL-E/Stability AI to generate a product image.
-4. **(Hour 3)** Integrate multimodal: pass product images (from Nimble scraping) into Claude vision to extract product features and generate richer descriptions
-5. **(Hour 4)** Wire all agents into the orchestrator's pipeline — ensure CEO agent correctly routes to Legal → Advertising in sequence after Research + Buyer
+1. **(Hour 1)** Design and document the activity input/output contracts — how Temporal activities pass validated JSON between agent steps
+2. **(Hour 1-2)** Legal Agent — given product name and category, returns ecommerce risk flags, not formal legal advice: trademark risk, regulated product risk, import/shipping restrictions, and ad claim risk. Uses Gemini through ADK with a risk-screening prompt.
+3. **(Hour 2-3)** Advertising Agent — generates product name, tagline, short ad copy, and hero image prompt using Gemini through ADK. Optionally call image generation for a product image.
+4. **(Hour 3)** Integrate multimodal: pass product images (from Nimble scraping) into Gemini vision to extract product features and generate richer descriptions
+5. **(Hour 4)** Wire Legal + Advertising into Temporal activities — ensure workflow routes Legal → Advertising in sequence after Research + Buyer
 
-#### A2A message schema:
+#### Temporal activity message schema:
 ```python
 @dataclass
-class AgentMessage:
-    from_agent: str
-    to_agent: str
-    action: str        # "research_complete", "legal_cleared", etc.
+class ActivityMessage:
+    run_id: str
+    activity_name: str
+    action: str        # "research_complete", "legal_risk_complete", etc.
     payload: dict
     timestamp: datetime
     business_id: str
@@ -371,10 +478,12 @@ Output JSON: {"cleared": bool, "risk_score": float, "flags": [...], "recommendat
    - Agent decision latency by type
    - Trend signal to store launch time distribution
    - Knowledge graph: businesses linked by shared supplier/category
+   - Temporal workflow run status by product/category
 3. **(Hour 2-3)** Datadog dashboards:
    - Agent activity timeline (one row per agent, gantt-style)
    - Store health metrics (active stores, orders, revenue estimate)
-   - API call trace viewer (Nimble, ClickHouse, Claude API latencies)
+   - API call trace viewer (Nimble, ClickHouse, Gemini/ADK latencies)
+   - Temporal workflow/activity latency and retry panel
    - Bias surface panel (showing "near-misses being reconsidered")
 4. **(Hour 3-4)** Demo prep:
    - Pre-warm ClickHouse with 5-10 synthetic past businesses (2 failed, 3 successful)
@@ -416,9 +525,9 @@ statsd.increment('trend.signals_detected', tags=['source:nimble'])
 
 | Time | Checkpoint | Owner(s) |
 |------|-----------|---------|
-| T+1h | FastAPI running locally, Claude agent returns valid JSON, ClickHouse schema created | Dipesh + Safal |
-| T+2h | Research agent pulls real Nimble data, Buyer agent returns a supplier, Next.js template renders from API | Dipesh + Safal |
-| T+3h | Full pipeline: Nimble → CEO → Research + Buyer + Legal + Advertising → store URL live | All |
+| T+1h | FastAPI running locally, Temporal worker connected, ADK/Gemini agent returns valid JSON, ClickHouse schema created | Dipesh + Safal |
+| T+2h | `POST /api/demo/trigger` starts Temporal workflow, Research activity pulls/caches Nimble data, Buyer activity returns a supplier, Next.js template renders from API | Dipesh + Safal |
+| T+3h | Full pipeline: Nimble/demo trigger → FastAPI → Temporal → Research + Buyer + Legal + Advertising → Store URL live | All |
 | T+3.5h | Datadog dashboards showing real data, bias mechanism returning results | Ali |
 | T+4h | Demo rehearsed, pre-warmed state loaded, fallback mode ready | All |
 
@@ -427,13 +536,14 @@ statsd.increment('trend.signals_detected', tags=['source:nimble'])
 ## Fallback / Demo Safety
 
 - **If live Nimble call fails**: Pre-cache a response JSON for "magnetic phone mount" — hardcoded trigger
-- **If Claude is slow**: Pre-generate agent outputs for the demo product, play them back with realistic delays
+- **If Gemini/ADK is slow**: Pre-generate agent outputs for the demo product, play them back with realistic delays
+- **If Temporal Cloud is unavailable**: Use local Temporal dev server for the demo, or run `DEMO_MODE=true` with a synchronous fallback path that still writes run events
+- **If a Temporal activity fails**: Let Temporal retry transient failures; after retries, use validated fallback JSON and mark the event as fallback in the run timeline
 - **If store deployment fails**: Localhost with ngrok tunnel is acceptable for demo
 - **If ClickHouse is down**: SQLite fallback for in-memory business node storage
 - **Demo mode**: `DEMO_MODE=true` forces cached trend data, supplier data, agent outputs, and realistic delays
-- **If any agent fails**: Return validated fallback JSON and mark the event as fallback in the run timeline
 - **If deployment fails late**: Route the slug to a pre-rendered store config through the wildcard subdomain
-- **Demo trigger**: Ali builds a `/demo/trigger` endpoint that runs the whole pipeline with fixed inputs — judges see live agent activity even in controlled mode
+- **Demo trigger**: Ali builds a `/demo/trigger` endpoint that starts the Temporal workflow with fixed inputs — judges see live agent activity even in controlled mode
 
 ---
 
@@ -444,22 +554,25 @@ statsd.increment('trend.signals_detected', tags=['source:nimble'])
 | **Nimble** | "Watch as Nimble detects this trending product in real-time..." — show the raw trend signal data |
 | **ClickHouse** | "Every business becomes a node in our knowledge graph — here's the ClickHouse query showing our bias mechanism surfacing a near-miss..." |
 | **Datadog** | Screen-share the live Datadog dashboard during the demo — agent timeline, latency traces, store health |
+| **Temporal** | Show the durable workflow run: activities, retries/fallbacks, and current run state for the same `run_id` |
 
 ---
 
 ## Verification / Demo Script
 
 ### Pre-demo checklist:
-- [ ] **Wildcard DNS set in GoDaddy**: `*.fastaisolution.com → server/Vercel IP` (do this first, takes ~10 min to propagate)
-- [ ] FastAPI server running (local or deployed), `GODADDY_API_KEY` + `GODADDY_API_SECRET` in env
-- [ ] Next.js frontend deployed on Vercel with `fastaisolution.com` + `*.fastaisolution.com` added as domains
+- [ ] **Wildcard DNS set in GoDaddy**: `*.fastaisolution.com → Render frontend target` (do this first, takes ~10 min to propagate)
+- [ ] FastAPI server running on Render, `GODADDY_API_KEY` + `GODADDY_API_SECRET` in env if using optional DNS cleanup
+- [ ] Next.js frontend deployed on Render with `fastaisolution.com` + `*.fastaisolution.com` routed to it
+- [ ] Temporal Cloud namespace configured, or local Temporal dev server running for demo fallback
+- [ ] Render Temporal worker is connected to the `launch-store` task queue
 - [ ] Test: `ping testslug.fastaisolution.com` resolves before demo
 - [ ] ClickHouse Cloud connected with 5-10 pre-seeded businesses
 - [ ] Datadog dashboard open in second browser tab
 - [ ] Nimble API key confirmed working
 - [ ] Demo trigger endpoint tested end-to-end (< 60 seconds total)
 - [ ] Pre-warmed store at `demo.fastaisolution.com` as hardcoded fallback
-- [ ] `POST /api/demo/trigger` creates a `run_id`
+- [ ] `POST /api/demo/trigger` creates a `run_id` and starts a Temporal workflow
 - [ ] Dashboard shows live agent event timeline for that `run_id`
 - [ ] Launch score is visible before store creation
 - [ ] Fallback mode tested with external APIs disabled
@@ -468,7 +581,7 @@ statsd.increment('trend.signals_detected', tags=['source:nimble'])
 ### 7-minute demo script:
 1. **(0:00-0:45)** Open the dashboard — show the knowledge graph with existing businesses, point out 2 failed ones
 2. **(0:45-1:30)** "Let's detect a new trend." — trigger Nimble scan, show the raw data coming in
-3. **(1:30-3:00)** "Our CEO agent activates." — show Datadog agent timeline lighting up: Research → Buyer → Legal → Advertising
+3. **(1:30-3:00)** "Our workflow activates." — show Temporal/Datadog timeline lighting up: Research → Buyer → Legal → Advertising
 4. **(3:00-4:00)** "The store is live." — navigate to `ergokeyboard.fastaisolution.com` in a browser (new tab, live URL), show the AI-generated content rendering on a real domain
 5. **(4:00-5:00)** "It's already in the knowledge graph." — run the ClickHouse query live, show the new node
 6. **(5:00-6:00)** "The bias mechanism surfaces a near-miss." — show the bias score query returning a failed category that's worth retrying, trigger a retry
@@ -482,6 +595,10 @@ statsd.increment('trend.signals_detected', tags=['source:nimble'])
 Auto-Ecommerce/
   backend/
     main.py
+    workflows/
+      launch_store.py
+      worker.py
+      activities.py
     agents/
       orchestrator.py
       research.py

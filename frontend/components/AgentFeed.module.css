@@ -1,0 +1,43 @@
+.panel {
+  padding: 20px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.feed {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.event {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.event div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.event strong {
+  text-transform: capitalize;
+}
+
+.event span {
+  color: #64748b;
+}
+
+.event p {
+  margin: 8px 0 0;
+  color: #334155;
+}

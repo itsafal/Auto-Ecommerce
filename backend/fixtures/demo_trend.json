@@ -1,0 +1,44 @@
+{
+  "signals": [
+    {
+      "product_name": "Magnetic Phone Mount",
+      "category": "phone_accessories",
+      "source": "tiktok",
+      "trend_score": 0.86,
+      "search_volume": 42000,
+      "social_mentions": 18000
+    },
+    {
+      "product_name": "Ergonomic Split Keyboard",
+      "category": "computer_peripherals",
+      "source": "youtube",
+      "trend_score": 0.78,
+      "search_volume": 28500,
+      "social_mentions": 9200
+    },
+    {
+      "product_name": "Portable Smoothie Blender",
+      "category": "kitchen_gadgets",
+      "source": "instagram",
+      "trend_score": 0.81,
+      "search_volume": 35100,
+      "social_mentions": 14000
+    },
+    {
+      "product_name": "Mini Pet Camera",
+      "category": "pet_supplies",
+      "source": "tiktok",
+      "trend_score": 0.74,
+      "search_volume": 22300,
+      "social_mentions": 11800
+    },
+    {
+      "product_name": "Posture-Correcting Back Brace",
+      "category": "wellness",
+      "source": "reddit",
+      "trend_score": 0.69,
+      "search_volume": 19200,
+      "social_mentions": 7400
+    }
+  ]
+}
