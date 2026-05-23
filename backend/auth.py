@@ -17,12 +17,18 @@ from backend.settings import get_settings
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 HASH_ITERATIONS = 210_000
+ALLOWED_EMAIL_DOMAIN = os.getenv("ALLOWED_EMAIL_DOMAIN", "fastaisolution.com").lower()
 
 
 def normalize_email(email: str) -> str:
     normalized = email.strip().lower()
     if not EMAIL_RE.match(normalized):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Enter a valid email address.")
+    if ALLOWED_EMAIL_DOMAIN and not normalized.endswith(f"@{ALLOWED_EMAIL_DOMAIN}"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Only @{ALLOWED_EMAIL_DOMAIN} accounts are allowed.",
+        )
     return normalized
 
 
