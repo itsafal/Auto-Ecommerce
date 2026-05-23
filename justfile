@@ -27,7 +27,7 @@ render-env:
     @echo
     @echo "Frontend Render service:"
     @echo "  Root dir: frontend"
-    @echo "  Build: corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm build"
+    @echo "  Build: corepack pnpm install --frozen-lockfile && corepack pnpm build"
     @echo "  Start: corepack pnpm exec next start -H 0.0.0.0 -p \\$PORT"
     @echo
     @echo "Set NEXT_PUBLIC_API_BASE_URL on the frontend to the backend Render URL."

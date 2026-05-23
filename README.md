@@ -6,12 +6,13 @@ Auto-Ecommerce is an autonomous multi-agent system that detects niche microtrend
 - Python 3.11+
 - `uv`
 - Node.js 20+
-- Corepack/pnpm
+- pnpm
 
 Enable pnpm if needed:
 
 ```bash
 corepack enable
+corepack prepare pnpm@11.2.2 --activate
 ```
 
 ## Environment
@@ -74,13 +75,13 @@ Frontend dependencies:
 
 ```bash
 cd frontend
-corepack pnpm install
+pnpm install
 ```
 
 If pnpm blocks dependency build scripts:
 
 ```bash
-corepack pnpm approve-builds --all
+pnpm approve-builds --all
 ```
 
 ## Run The App
@@ -101,14 +102,14 @@ Terminal 2, start the frontend:
 
 ```bash
 cd frontend
-NEXT_PUBLIC_USE_MOCKS=false NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 corepack pnpm dev
+NEXT_PUBLIC_USE_MOCKS=false NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 pnpm dev
 ```
 
 PowerShell equivalent:
 
 ```powershell
 cd frontend
-$env:NEXT_PUBLIC_USE_MOCKS="false"; $env:NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8000"; corepack pnpm dev
+$env:NEXT_PUBLIC_USE_MOCKS="false"; $env:NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8000"; pnpm dev
 ```
 
 Open:
@@ -222,14 +223,14 @@ Run frontend tests:
 
 ```bash
 cd frontend
-corepack pnpm test
+pnpm test
 ```
 
 Run the production frontend build:
 
 ```bash
 cd frontend
-corepack pnpm build
+pnpm build
 ```
 
 ## Git Hygiene

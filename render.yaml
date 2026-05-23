@@ -10,6 +10,8 @@ services:
     buildCommand: pip install uv && uv sync --extra temporal --frozen
     startCommand: uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.12"
       - key: USE_CLICKHOUSE
         value: "true"
       - key: USE_AGENT_FIXTURES
@@ -65,9 +67,11 @@ services:
     plan: free
     rootDir: frontend
     autoDeploy: false
-    buildCommand: corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm build
+    buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm build
     startCommand: corepack pnpm exec next start -H 0.0.0.0 -p $PORT
     envVars:
+      - key: NODE_VERSION
+        value: "20.19.0"
       - key: NEXT_PUBLIC_USE_MOCKS
         value: "false"
       # Hard-coded backend URL. If the backend service is renamed, update here.
