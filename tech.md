@@ -23,6 +23,9 @@ Nimble trend signal / demo trigger
 FastAPI run orchestrator
         |
         v
+Temporal workflow
+        |
+        v
 Claude SDK agents
         |
         v
@@ -61,9 +64,9 @@ Routing model:
 
 Responsibilities:
 
-- Start launch runs.
+- Start launch runs and hand long-running work to Temporal.
 - Own the `run_id`.
-- Call agents in order.
+- Expose API endpoints for triggering runs and reading run state.
 - Calculate the launch score.
 - Create store configs.
 - Write run state, agent events, businesses, and signals to ClickHouse.
@@ -77,6 +80,82 @@ Primary endpoints:
 - `GET /api/runs/{run_id}/events`
 - `GET /api/stores`
 - `GET /api/agents/status`
+
+## Async Workflows
+
+**Choice:** Temporal
+
+Use Temporal for long-running and retryable orchestration. FastAPI should not
+hold one HTTP request open while all agents run.
+
+Responsibilities:
+
+- Run the full launch workflow asynchronously.
+- Execute agent steps in order.
+- Retry transient failures from Claude, Nimble, supplier lookup, ClickHouse, or
+  store creation.
+- Persist workflow progress independently of API server restarts.
+- Support manual demo triggers and scheduled trend-triggered launches.
+- Make each launch run resumable and observable by `run_id`.
+
+Workflow shape:
+
+```text
+LaunchStoreWorkflow(run_id, product_input)
+        |
+        v
+ResearchActivity
+        |
+        v
+BuyerActivity
+        |
+        v
+LegalRiskActivity
+        |
+        v
+AdvertisingActivity
+        |
+        v
+ScoreLaunchActivity
+        |
+        v
+CreateStoreActivity
+```
+
+FastAPI starts the workflow and immediately returns:
+
+```json
+{
+  "run_id": "uuid",
+  "status": "started"
+}
+```
+
+The dashboard then follows the run through:
+
+- `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/events`
+
+Temporal activity boundaries:
+
+- Each agent call should be a Temporal activity.
+- Each external service call should have timeout and retry policy.
+- Each activity should write an `agent_events` row before and after execution.
+- Fallback fixture usage should be recorded as an event, not hidden.
+
+Recommended Render services:
+
+- `auto-ecommerce-api` for FastAPI
+- `auto-ecommerce-web` for Next.js
+- `auto-ecommerce-worker` for Temporal workers
+- `auto-ecommerce-trend-cron` for scheduled trend checks
+
+Temporal hosting:
+
+- Use Temporal Cloud if available.
+- For local development, use Temporal server via Docker Compose.
+- For hackathon deployment, Temporal Cloud is preferred because it avoids
+  managing Temporal server infrastructure during the demo.
 
 ## Agents
 
@@ -118,6 +197,7 @@ Non-agent services:
 - Store creator
 - ClickHouse client
 - Datadog client
+- Temporal worker
 - Scheduler
 - Demo fallback loader
 
@@ -249,12 +329,14 @@ Deploy on Render:
 
 1. Render Web Service: FastAPI backend
 2. Render Web Service: Next.js frontend
-3. Render Cron Job: scheduled trend monitor
+3. Render Background Worker: Temporal worker
+4. Render Cron Job: scheduled trend monitor
 
 Recommended services:
 
 - `auto-ecommerce-api`
 - `auto-ecommerce-web`
+- `auto-ecommerce-worker`
 - `auto-ecommerce-trend-cron`
 
 Environment variables:
@@ -267,6 +349,10 @@ Environment variables:
 - `CLICKHOUSE_DATABASE`
 - `DATADOG_API_KEY`
 - `DATADOG_SITE`
+- `TEMPORAL_ADDRESS`
+- `TEMPORAL_NAMESPACE`
+- `TEMPORAL_API_KEY`
+- `TEMPORAL_TASK_QUEUE=launch-store`
 - `BASE_DOMAIN=fastaisolution.com`
 - `DEMO_MODE=false`
 
@@ -281,7 +367,8 @@ For demo fallback:
 
 **Choice:** Render Cron Job
 
-The cron job runs the trend monitor.
+The cron job runs the trend monitor. When it finds a promising product, it
+calls FastAPI or starts a Temporal workflow.
 
 Suggested demo-safe schedule:
 
@@ -335,6 +422,7 @@ Build in this order:
 | --- | --- |
 | Frontend | Next.js + React + Tailwind CSS |
 | Backend | Python + FastAPI |
+| Async workflows | Temporal |
 | Agents | Claude SDK |
 | Trend data | Nimble |
 | Demo fallback | Cached fixtures with `DEMO_MODE=true` |
@@ -342,5 +430,5 @@ Build in this order:
 | Observability | Datadog |
 | Domain | GoDaddy wildcard DNS |
 | Deployment | Render |
-| Scheduler | Render Cron Job |
+| Scheduler | Render Cron Job + Temporal workflow start |
 | Store model | Many subdomains, one shared platform |
