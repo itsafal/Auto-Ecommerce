@@ -276,15 +276,79 @@ async def _google_gemini_json(prompt: str) -> dict | None:
     return _parse_json_text(text)
 
 
-async def _gemini_json(prompt: str, *, ignore_fixture_flag: bool = False) -> dict | None:
+async def _anthropic_json(prompt: str) -> dict | None:
+    """Anthropic Claude path. Uses the official anthropic SDK."""
+    global _last_llm_error
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        return None
+
+    try:
+        from anthropic import AsyncAnthropic
+    except ImportError as exc:
+        msg = f"anthropic ImportError: {exc}"
+        logger.warning("[llm] %s", msg)
+        _last_llm_error = msg
+        return None
+
+    try:
+        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        message = await client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=900,
+            system="Return only valid JSON. Do not include markdown or commentary.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        # message.content is a list of content blocks; take the first text block.
+        text_parts = [block.text for block in message.content if getattr(block, "type", None) == "text"]
+        text = "".join(text_parts)
+    except Exception as exc:
+        # Anthropic SDK raises typed errors (APIStatusError etc.); they all have str(exc).
+        msg = f"anthropic {type(exc).__name__}: {exc}"
+        logger.warning("[llm] %s", msg)
+        _last_llm_error = msg
+        return None
+
+    return _parse_json_text(text)
+
+
+async def _llm_json(prompt: str, *, ignore_fixture_flag: bool = False) -> dict | None:
+    """Dispatch a JSON-mode LLM call based on LLM_PROVIDER and which keys are set.
+
+    Provider selection:
+      - LLM_PROVIDER=anthropic | portkey | gemini → force that provider only
+      - LLM_PROVIDER=auto (default) → try portkey, then anthropic, then gemini,
+        skipping any without a key
+    """
     settings = get_settings()
     if settings.use_agent_fixtures and not ignore_fixture_flag:
         return None
 
-    portkey_result = await _portkey_json(prompt)
-    if portkey_result is not None:
-        return portkey_result
-    return await _google_gemini_json(prompt)
+    provider = settings.llm_provider
+    if provider == "anthropic":
+        return await _anthropic_json(prompt)
+    if provider == "portkey":
+        return await _portkey_json(prompt)
+    if provider == "gemini" or provider == "google":
+        return await _google_gemini_json(prompt)
+
+    # auto: try in order, skip those without keys
+    for fn, has_key in (
+        (_portkey_json, bool(settings.portkey_api_key)),
+        (_anthropic_json, bool(settings.anthropic_api_key)),
+        (_google_gemini_json, bool(settings.google_api_key)),
+    ):
+        if not has_key:
+            continue
+        result = await fn(prompt)
+        if result is not None:
+            return result
+    return None
+
+
+# Backward-compatible alias — existing call sites use _gemini_json. New code
+# can use _llm_json directly.
+_gemini_json = _llm_json
 
 
 _FALLBACK_TRENDING = [
@@ -775,10 +839,26 @@ def build_launch_result(
 
 
 def _model_label() -> str:
-    """Best-effort label of which LLM the agents would have used."""
+    """Best-effort label of which LLM the agents would have used.
+
+    Respects LLM_PROVIDER overrides so the agent_decisions log reflects
+    the operator's chosen provider, not just whichever key happens to be set.
+    """
     s = get_settings()
+    provider = s.llm_provider
+
+    if provider == "anthropic":
+        return s.anthropic_model if s.anthropic_api_key else "fixture"
+    if provider == "portkey":
+        return s.portkey_model if s.portkey_api_key else "fixture"
+    if provider in ("gemini", "google"):
+        return s.gemini_model if s.google_api_key else "fixture"
+
+    # auto: match the order in _llm_json
     if s.portkey_api_key:
         return s.portkey_model
+    if s.anthropic_api_key:
+        return s.anthropic_model
     if s.google_api_key:
         return s.gemini_model
     return "fixture"

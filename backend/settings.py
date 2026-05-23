@@ -33,6 +33,11 @@ class Settings:
     portkey_api_key: str = ""
     portkey_base_url: str = "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"
     portkey_model: str = "@vertexai/gemini-3.5-flash"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-6"
+    # "auto" = try providers in order (portkey, anthropic, gemini) based on which
+    # keys are set. Override with "anthropic" | "portkey" | "gemini" to force one.
+    llm_provider: str = "auto"
     nimble_api_key: str = ""
     nimble_api_url: str = ""
 
@@ -55,6 +60,9 @@ def get_settings() -> Settings:
         portkey_api_key=os.getenv("PORTKEY_API_KEY", ""),
         portkey_base_url=os.getenv("PORTKEY_BASE_URL", "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"),
         portkey_model=os.getenv("PORTKEY_MODEL", "@vertexai/gemini-3.5-flash"),
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+        anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+        llm_provider=(os.getenv("LLM_PROVIDER", "auto") or "auto").strip().lower(),
         nimble_api_key=os.getenv("NIMBLE_API_KEY", ""),
         nimble_api_url=os.getenv("NIMBLE_API_URL", ""),
     )
