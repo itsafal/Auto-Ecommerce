@@ -1,0 +1,64 @@
+{
+  "suppliers": [
+    {
+      "supplier_id": "supp_4821",
+      "supplier_name": "Demo Supplier 4821",
+      "category": "phone_accessories",
+      "unit_cost": 8.4,
+      "shipping_days": 6,
+      "rating": 4.7,
+      "estimated_margin": 0.61,
+      "margin_score": 0.72,
+      "confidence_score": 0.84,
+      "risk_flags": []
+    },
+    {
+      "supplier_id": "supp_2210",
+      "supplier_name": "ErgoForge Wholesale",
+      "category": "computer_peripherals",
+      "unit_cost": 22.0,
+      "shipping_days": 9,
+      "rating": 4.5,
+      "estimated_margin": 0.54,
+      "margin_score": 0.66,
+      "confidence_score": 0.78,
+      "risk_flags": []
+    },
+    {
+      "supplier_id": "supp_9007",
+      "supplier_name": "BlendFast Distributors",
+      "category": "kitchen_gadgets",
+      "unit_cost": 11.3,
+      "shipping_days": 7,
+      "rating": 4.6,
+      "estimated_margin": 0.58,
+      "margin_score": 0.70,
+      "confidence_score": 0.81,
+      "risk_flags": []
+    },
+    {
+      "supplier_id": "supp_3140",
+      "supplier_name": "PetVision Direct",
+      "category": "pet_supplies",
+      "unit_cost": 13.9,
+      "shipping_days": 8,
+      "rating": 4.3,
+      "estimated_margin": 0.49,
+      "margin_score": 0.60,
+      "confidence_score": 0.71,
+      "risk_flags": ["import_compliance"]
+    },
+    {
+      "supplier_id": "supp_5512",
+      "supplier_name": "WellSpine Trading",
+      "category": "wellness",
+      "unit_cost": 9.7,
+      "shipping_days": 10,
+      "rating": 4.1,
+      "estimated_margin": 0.45,
+      "margin_score": 0.55,
+      "confidence_score": 0.66,
+      "risk_flags": ["health_claims"]
+    }
+  ]
+}
