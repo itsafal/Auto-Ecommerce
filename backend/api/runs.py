@@ -215,8 +215,7 @@ async def get_run_events(run_id: UUID) -> AgentEventsResponse:
 
 @router.get("/stores")
 async def get_stores() -> dict[str, list[LaunchRun]]:
-    runs = [run for run in run_store._runs.values() if run.store_url]
-    return {"stores": runs}
+    return {"stores": run_store.list_runs_with_stores()}
 
 
 @router.get("/stores/{slug}", response_model=StoreOutput)
