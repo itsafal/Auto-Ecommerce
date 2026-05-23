@@ -1,7 +1,9 @@
 .venv/
 __pycache__/
+**/__pycache__/
 .pytest_cache/
 *.py[cod]
+**/*.py[cod]
 
 # Python tooling
 .mypy_cache/
@@ -17,6 +19,7 @@ node_modules/
 .next/
 out/
 coverage/
+frontend/package-lock.json
 
 # Logs and local OS files
 *.log
