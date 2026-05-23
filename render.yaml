@@ -52,6 +52,12 @@ services:
         sync: false
       - key: GOOGLE_CLOUD_LOCATION
         sync: false
+      - key: PORTKEY_API_KEY
+        sync: false
+      - key: PORTKEY_BASE_URL
+        value: https://ai-gateway.apps.cloud.rt.nyu.edu/v1
+      - key: PORTKEY_MODEL
+        value: "@vertexai/gemini-3.5-flash"
       - key: NIMBLE_API_KEY
         sync: false
       - key: NIMBLE_API_URL

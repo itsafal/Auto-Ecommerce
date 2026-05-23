@@ -176,7 +176,18 @@ REQUIRE_AUTH_FOR_RUNS=true
 
 For real ClickHouse persistence, set `USE_CLICKHOUSE=true` on the backend service and fill in the `CLICKHOUSE_*` secret values in Render. Do not put real secrets in `render.yaml` or `.env.example`.
 
-For real Gemini content generation, set these on the backend service:
+For real Gemini content generation through Portkey, set these on the backend service:
+
+```env
+USE_AGENT_FIXTURES=false
+PORTKEY_API_KEY=
+PORTKEY_BASE_URL=https://ai-gateway.apps.cloud.rt.nyu.edu/v1
+PORTKEY_MODEL=@vertexai/gemini-3.5-flash
+```
+
+Do not commit `PORTKEY_API_KEY`; add it only in your local `.env` or the Render dashboard.
+
+Direct Google Gemini is still supported as a fallback if Portkey is not configured:
 
 ```env
 USE_AGENT_FIXTURES=false

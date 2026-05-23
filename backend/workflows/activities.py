@@ -191,11 +191,50 @@ def _product_profile(product_name: str) -> dict:
     }
 
 
-async def _gemini_json(prompt: str, *, ignore_fixture_flag: bool = False) -> dict | None:
+def _parse_json_text(text: str) -> dict | None:
+    raw = text.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?", "", raw).strip()
+        raw = re.sub(r"```$", "", raw).strip()
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+async def _portkey_json(prompt: str) -> dict | None:
+    settings = get_settings()
+    if not settings.portkey_api_key:
+        return None
+
+    base_url = settings.portkey_base_url.rstrip("/")
+    payload = {
+        "model": settings.portkey_model,
+        "messages": [
+            {"role": "system", "content": "Return only valid JSON. Do not include markdown or commentary."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+        "max_tokens": 900,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.portkey_api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
+            response.raise_for_status()
+            text = response.json()["choices"][0]["message"]["content"]
+    except Exception:
+        return None
+    return _parse_json_text(text)
+
+
+async def _google_gemini_json(prompt: str) -> dict | None:
     settings = get_settings()
     if not settings.google_api_key:
-        return None
-    if settings.use_agent_fixtures and not ignore_fixture_flag:
         return None
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.gemini_model}:generateContent"
@@ -208,14 +247,18 @@ async def _gemini_json(prompt: str, *, ignore_fixture_flag: bool = False) -> dic
     except Exception:
         return None
 
-    raw = text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?", "", raw).strip()
-        raw = re.sub(r"```$", "", raw).strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
+    return _parse_json_text(text)
+
+
+async def _gemini_json(prompt: str, *, ignore_fixture_flag: bool = False) -> dict | None:
+    settings = get_settings()
+    if settings.use_agent_fixtures and not ignore_fixture_flag:
         return None
+
+    portkey_result = await _portkey_json(prompt)
+    if portkey_result is not None:
+        return portkey_result
+    return await _google_gemini_json(prompt)
 
 
 _FALLBACK_TRENDING = [

@@ -28,6 +28,9 @@ class Settings:
     require_auth_for_runs: bool = True
     google_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
+    portkey_api_key: str = ""
+    portkey_base_url: str = "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"
+    portkey_model: str = "@vertexai/gemini-3.5-flash"
     nimble_api_key: str = ""
     nimble_api_url: str = ""
 
@@ -47,6 +50,9 @@ def get_settings() -> Settings:
         require_auth_for_runs=_env_bool("REQUIRE_AUTH_FOR_RUNS", True),
         google_api_key=os.getenv("GOOGLE_API_KEY", ""),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        portkey_api_key=os.getenv("PORTKEY_API_KEY", ""),
+        portkey_base_url=os.getenv("PORTKEY_BASE_URL", "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"),
+        portkey_model=os.getenv("PORTKEY_MODEL", "@vertexai/gemini-3.5-flash"),
         nimble_api_key=os.getenv("NIMBLE_API_KEY", ""),
         nimble_api_url=os.getenv("NIMBLE_API_URL", ""),
     )
