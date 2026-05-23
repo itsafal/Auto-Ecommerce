@@ -1,0 +1,45 @@
+.panel {
+  padding: 20px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.header p {
+  margin: 8px 0 0;
+  color: #64748b;
+}
+
+.header strong {
+  color: #0f766e;
+  font-size: 34px;
+}
+
+.rows {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.row span:last-child {
+  font-weight: 800;
+}
