@@ -165,6 +165,26 @@ class InMemoryRunStore:
                 exc_info=True,
             )
 
+    def record_trend_signal(self, signal: dict[str, Any]) -> None:
+        """Append a row to trend_signals (analytics time-series of researched products).
+
+        Best-effort: failures are logged but never raised.
+        """
+        if not use_clickhouse():
+            return
+        try:
+            client = get_client()
+            if not hasattr(client, "write_trend_signal"):
+                return
+            client.write_trend_signal(signal)
+        except Exception as exc:
+            logger.error(
+                "[run_store] write_trend_signal FAILED for %r: %s",
+                signal.get("product_name"),
+                exc,
+                exc_info=True,
+            )
+
     # ----- ClickHouse mirror (dual-write side) -----
 
     def _mirror_run(self, run: LaunchRun, is_new: bool) -> None:
