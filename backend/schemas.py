@@ -43,6 +43,29 @@ class LaunchRequest(BaseModel):
     product_name: str = Field(default="Magnetic Phone Mount", min_length=1)
 
 
+class AuthSignupRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=256)
+    full_name: str = Field(default="", max_length=120)
+
+
+class AuthLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class AuthUser(BaseModel):
+    id: UUID
+    email: str
+    full_name: str = ""
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: AuthUser
+
+
 class LaunchTriggerResponse(BaseModel):
     run_id: UUID
     status: RunStatus

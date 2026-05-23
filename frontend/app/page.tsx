@@ -8,7 +8,11 @@ export default function HomePage() {
         AI-powered product testing with focused micro-stores and a live agent
         run dashboard.
       </p>
-      <Link href="/dashboard">Open dashboard</Link>
+      <nav style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <Link href="/signup">Create account</Link>
+        <Link href="/login">Log in</Link>
+        <Link href="/dashboard">Open dashboard</Link>
+      </nav>
     </main>
   );
 }
