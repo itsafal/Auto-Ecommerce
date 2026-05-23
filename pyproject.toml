@@ -9,6 +9,7 @@ dependencies = [
   "pydantic>=2",
   "pytest>=8",
   "uvicorn>=0.30",
+  "clickhouse-connect>=0.7",
 ]
 
 [project.optional-dependencies]
