@@ -35,6 +35,9 @@ export default function DashboardPage() {
   const [run, setRun] = useState<LaunchRun | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [isTriggering, setIsTriggering] = useState(false);
+  const [trendingProducts, setTrendingProducts] = useState<string[]>(fallbackProducts);
+  const [trendingSource, setTrendingSource] = useState<string>("fixture");
+  const [isLoadingTrends, setIsLoadingTrends] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSessionReady, setIsSessionReady] = useState(useMockMode);
 
@@ -68,6 +71,29 @@ export default function DashboardPage() {
         router.replace("/login");
       });
   }, [router]);
+
+  async function refreshTrends() {
+    setIsLoadingTrends(true);
+    try {
+      const res = await getTrendingProducts();
+      if (res.products.length > 0) {
+        setTrendingProducts(res.products);
+        setTrendingSource(res.source);
+        if (!res.products.includes(productName)) {
+          setProductName(res.products[0]);
+        }
+      }
+    } catch {
+      // keep fallback list silently
+    } finally {
+      setIsLoadingTrends(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshTrends();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleTrigger() {
     setIsTriggering(true);
