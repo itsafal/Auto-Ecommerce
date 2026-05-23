@@ -20,6 +20,8 @@
 6. **Knowledge graph node created** — ClickHouse records this business as a node (product category, margin, supplier, launch time)
 7. **Datadog dashboard lights up** — shows agent activity timeline, store health, API call traces, order pipeline
 8. **Bias mechanism surfaces** — system shows a "near-miss" from a previously failed category that's now worth retrying (knowledge compounding)
+9. **Launch decision score appears** — dashboard shows trend score, margin score, supplier confidence, compliance risk, and final launch/no-launch decision
+10. **Run timeline persists** — every agent event is saved under one `run_id`, visible in the dashboard, ClickHouse, and Datadog traces
 
 Demo runtime: ~7 minutes. Everything is scripted to trigger live, with pre-warmed state as fallback.
 
@@ -28,22 +30,19 @@ Demo runtime: ~7 minutes. Everything is scripted to trigger live, with pre-warme
 ## Architecture
 
 ```
-[Nimble / Scrapling]
-       |
-       v
-[Research Agent] --> [CEO Orchestrator Agent] --> [Buyer Agent]
-                              |                        |
-                      [Legal Agent]           [Supplier APIs]
-                              |
-                      [Advertising Agent]
-                              |
-                    [Next.js Store Template]
-                              |
-                       [FastAPI Backend]
-                              |
-                    [ClickHouse Cloud DB]
-                              |
-                    [Datadog Observability]
+[Demo Trigger / Nimble Trend Signal]
+              |
+              v
+[Run Orchestrator: run_id, status, events, fallbacks]
+              |
+              v
+[Research] -> [Buyer] -> [Legal] -> [Advertising] -> [Store]
+              |          |          |             |
+              v          v          v             v
+        [Launch Scoring + Supplier Confidence + Risk Flags]
+              |
+              v
+     [ClickHouse Knowledge Graph + Datadog Observability]
 ```
 
 **Backend**: Python + FastAPI  
@@ -151,6 +150,39 @@ CREATE TABLE trend_signals (
   social_mentions UInt32,
   detected_at DateTime DEFAULT now()
 ) ENGINE = MergeTree() ORDER BY detected_at;
+
+-- One record per launch attempt/demo run
+CREATE TABLE launch_runs (
+  run_id UUID,
+  product_name String,
+  slug String,
+  status String,
+  launch_score Float32,
+  started_at DateTime DEFAULT now(),
+  completed_at Nullable(DateTime),
+  error Nullable(String)
+) ENGINE = MergeTree() ORDER BY (started_at, run_id);
+
+-- Timeline events shown in dashboard and correlated with Datadog traces
+CREATE TABLE agent_events (
+  run_id UUID,
+  business_id Nullable(UUID),
+  agent_name String,
+  event_type String,
+  message String,
+  payload String,
+  timestamp DateTime DEFAULT now()
+) ENGINE = MergeTree() ORDER BY (run_id, timestamp);
+
+-- Edges that make the ClickHouse layer feel like a knowledge graph
+CREATE TABLE business_relationships (
+  from_business_id UUID,
+  to_business_id UUID,
+  relationship_type String,
+  weight Float32,
+  reason String,
+  created_at DateTime DEFAULT now()
+) ENGINE = MergeTree() ORDER BY (from_business_id, relationship_type);
 ```
 
 ---
@@ -166,12 +198,16 @@ CREATE TABLE trend_signals (
 #### Tasks:
 1. **(Hour 1)** Set up FastAPI project structure, define agent interfaces, wire Claude SDK
    - `POST /api/launch-store` — main endpoint that triggers the full loop
+   - `POST /api/demo/trigger` — deterministic demo path that creates a `run_id`
+   - `GET /api/runs/{run_id}` — current status, launch score, store URL, errors
+   - `GET /api/runs/{run_id}/events` — agent timeline for dashboard + Datadog correlation
    - `GET /api/stores` — list all active businesses from ClickHouse
    - `GET /api/agents/status` — Datadog-instrumented agent health
-2. **(Hour 1-2)** CEO Orchestrator agent — takes a product name, routes to sub-agents, assembles final store config
+2. **(Hour 1-2)** CEO Orchestrator agent — takes a product name, creates run state, routes to sub-agents, assembles final store config
 3. **(Hour 2-3)** Research Agent — calls Nimble API, parses trend data, writes to ClickHouse `trend_signals`
-4. **(Hour 3-4)** Buyer Agent — queries 2-3 supplier sources (AliExpress via scraping, or mock supplier API), picks winner, writes to ClickHouse `businesses`
-5. **(Hour 4)** Wire Datadog traces — `ddtrace` decorators on each agent call, custom metric for `agent.decisions` count
+4. **(Hour 3-4)** Buyer Agent — queries 2-3 supplier sources (AliExpress via scraping, or mock supplier API), picks winner using supplier confidence, writes to ClickHouse `businesses`
+5. **(Hour 4)** Add launch scoring + fallback fixtures — trend, margin, supplier confidence, compliance risk; cached Nimble/supplier/agent outputs for `DEMO_MODE=true`
+6. **(Hour 4)** Wire Datadog traces — `ddtrace` decorators on each agent call, custom metric for `agent.decisions` count, tags for `run_id`, `agent`, and `product_slug`
 
 #### Key files:
 ```
@@ -185,6 +221,10 @@ backend/
     clickhouse.py      # ClickHouse client + insert helpers
   observability/
     datadog.py         # ddtrace setup, custom metrics
+  fixtures/
+    demo_trend.json    # Cached Nimble response for fallback/demo mode
+    suppliers.json     # Deterministic supplier responses
+  schemas.py           # Pydantic contracts for all agent outputs
 ```
 
 #### Claude SDK pattern for agents:
@@ -201,6 +241,29 @@ def run_research_agent(product_name: str) -> dict:
         messages=[{"role": "user", "content": f"Research: {product_name}"}]
     )
     return parse_research_output(response)
+```
+
+#### Buyer agent supplier confidence output:
+```json
+{
+  "supplier_name": "AliExpress Seller #4821",
+  "unit_cost": 8.40,
+  "shipping_days": 6,
+  "rating": 4.7,
+  "estimated_margin": 0.61,
+  "risk_flags": [],
+  "confidence_score": 0.84
+}
+```
+
+#### Launch scoring:
+```python
+launch_score = (
+    trend_score * 0.30
+    + margin_score * 0.25
+    + supplier_confidence * 0.25
+    - compliance_risk * 0.20
+)
 ```
 
 ---
@@ -259,7 +322,7 @@ backend/
 
 #### Tasks:
 1. **(Hour 1)** Design and document the A2A message protocol — how agents communicate (input/output schemas for each agent type)
-2. **(Hour 1-2)** Legal Agent — given product name and category, checks: is this dropshippable? any trademark issues? returns a compliance clearance or flag. Uses Claude with a legal reasoning prompt.
+2. **(Hour 1-2)** Legal Agent — given product name and category, returns ecommerce risk flags, not formal legal advice: trademark risk, regulated product risk, import/shipping restrictions, and ad claim risk. Uses Claude with a legal reasoning prompt.
 3. **(Hour 2-3)** Advertising Agent — generates product name, tagline, short ad copy, and hero image prompt using Claude. Optionally call DALL-E/Stability AI to generate a product image.
 4. **(Hour 3)** Integrate multimodal: pass product images (from Nimble scraping) into Claude vision to extract product features and generate richer descriptions
 5. **(Hour 4)** Wire all agents into the orchestrator's pipeline — ensure CEO agent correctly routes to Legal → Advertising in sequence after Research + Buyer
@@ -279,8 +342,9 @@ class AgentMessage:
 #### Legal agent prompt pattern:
 ```python
 LEGAL_SYSTEM = """You are a legal compliance agent for e-commerce.
-Check: trademark conflicts, dropshipping restrictions, import regulations.
-Output JSON: {"cleared": bool, "flags": [...], "recommendation": "..."}"""
+Check ecommerce launch risk, not formal legal advice.
+Flag: trademark conflicts, dropshipping restrictions, import regulations, regulated product risk, and risky ad claims.
+Output JSON: {"cleared": bool, "risk_score": float, "flags": [...], "recommendation": "..."}"""
 ```
 
 #### Advertising agent output:
@@ -326,7 +390,10 @@ SELECT
   category,
   status,
   trend_score,
-  (trend_score * 0.6 + (1 - toRelativeHourNum(created_at) / 720.0) * 0.4) AS bias_score
+  dateDiff('hour', created_at, now()) AS age_hours,
+  trend_score * 0.6
+    + greatest(0, 1 - dateDiff('hour', created_at, now()) / 720.0) * 0.4
+    AS bias_score
 FROM businesses
 WHERE status IN ('failed', 'paused')
 ORDER BY bias_score DESC
@@ -363,6 +430,9 @@ statsd.increment('trend.signals_detected', tags=['source:nimble'])
 - **If Claude is slow**: Pre-generate agent outputs for the demo product, play them back with realistic delays
 - **If store deployment fails**: Localhost with ngrok tunnel is acceptable for demo
 - **If ClickHouse is down**: SQLite fallback for in-memory business node storage
+- **Demo mode**: `DEMO_MODE=true` forces cached trend data, supplier data, agent outputs, and realistic delays
+- **If any agent fails**: Return validated fallback JSON and mark the event as fallback in the run timeline
+- **If deployment fails late**: Route the slug to a pre-rendered store config through the wildcard subdomain
 - **Demo trigger**: Ali builds a `/demo/trigger` endpoint that runs the whole pipeline with fixed inputs — judges see live agent activity even in controlled mode
 
 ---
@@ -389,6 +459,11 @@ statsd.increment('trend.signals_detected', tags=['source:nimble'])
 - [ ] Nimble API key confirmed working
 - [ ] Demo trigger endpoint tested end-to-end (< 60 seconds total)
 - [ ] Pre-warmed store at `demo.fastaisolution.com` as hardcoded fallback
+- [ ] `POST /api/demo/trigger` creates a `run_id`
+- [ ] Dashboard shows live agent event timeline for that `run_id`
+- [ ] Launch score is visible before store creation
+- [ ] Fallback mode tested with external APIs disabled
+- [ ] At least one simulated order event appears after store launch
 
 ### 7-minute demo script:
 1. **(0:00-0:45)** Open the dashboard — show the knowledge graph with existing businesses, point out 2 failed ones
