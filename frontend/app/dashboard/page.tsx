@@ -179,8 +179,21 @@ export default function DashboardPage() {
             value={productName}
             onChange={(event) => setProductName(event.target.value)}
           />
+          <div className={styles.trendHeader}>
+            <span className={styles.trendLabel}>
+              Trend Scout {trendingSource === "gemini" ? "· live (Gemini)" : "· fixture"}
+            </span>
+            <button
+              type="button"
+              className={styles.trendRefresh}
+              onClick={refreshTrends}
+              disabled={isLoadingTrends || isTriggering}
+            >
+              {isLoadingTrends ? "Scanning..." : "Refresh trends"}
+            </button>
+          </div>
           <div className={styles.chips}>
-            {demoProducts.map((product) => (
+            {trendingProducts.map((product) => (
               <button
                 type="button"
                 key={product}
@@ -194,7 +207,7 @@ export default function DashboardPage() {
             ))}
           </div>
           <datalist id="demo-products">
-            {demoProducts.map((product) => (
+            {trendingProducts.map((product) => (
               <option key={product} value={product} />
             ))}
           </datalist>

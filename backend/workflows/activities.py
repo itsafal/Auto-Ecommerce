@@ -182,9 +182,11 @@ def _product_profile(product_name: str) -> dict:
     }
 
 
-async def _gemini_json(prompt: str) -> dict | None:
+async def _gemini_json(prompt: str, *, ignore_fixture_flag: bool = False) -> dict | None:
     settings = get_settings()
-    if settings.use_agent_fixtures or not settings.google_api_key:
+    if not settings.google_api_key:
+        return None
+    if settings.use_agent_fixtures and not ignore_fixture_flag:
         return None
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.gemini_model}:generateContent"
@@ -230,7 +232,7 @@ async def discover_trending_products(limit: int = 8) -> dict:
         "work as a focused one-product store. Mix tech, wellness, home, fitness, lifestyle. "
         "Return ONLY JSON: {\"products\": [\"...\", ...]}. No commentary."
     )
-    result = await _gemini_json(prompt)
+    result = await _gemini_json(prompt, ignore_fixture_flag=True)
     products: list[str] = []
     if isinstance(result, dict):
         raw = result.get("products") or result.get("items") or []
