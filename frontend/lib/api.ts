@@ -147,6 +147,38 @@ export async function getTrendingProducts(): Promise<{ products: string[]; sourc
   return response.json();
 }
 
+export type LLMConfig = {
+  provider: "auto" | "anthropic" | "portkey" | "gemini" | "google";
+  auto_chain_winner: string;
+  anthropic_model: string;
+  gemini_model: string;
+  portkey_model: string;
+  keys_set: { anthropic: boolean; portkey: boolean; gemini: boolean };
+};
+
+export async function getLLMConfig(): Promise<LLMConfig> {
+  const response = await fetch(`${apiBaseUrl()}/api/admin/llm`);
+  if (!response.ok) {
+    throw new Error("Failed to load LLM config");
+  }
+  return response.json();
+}
+
+export async function updateLLMConfig(
+  patch: Partial<Pick<LLMConfig, "provider" | "anthropic_model" | "gemini_model" | "portkey_model">>
+): Promise<LLMConfig> {
+  const response = await fetch(`${apiBaseUrl()}/api/admin/llm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch)
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? "Failed to update LLM config");
+  }
+  return response.json();
+}
+
 export async function getCurrentUser(token: string): Promise<AuthUser> {
   const response = await fetch(`${apiBaseUrl()}/api/auth/me`, {
     headers: { Authorization: `Bearer ${token}` }

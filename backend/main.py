@@ -1,10 +1,28 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+# Auto-load .env from the project root so `uv run uvicorn ...` and any
+# direct python entry point picks up local secrets without `set -a; source .env`.
+# Existing process env vars win — we don't override what's already set. Skipped
+# under pytest so tests use their own controlled environment.
+import sys as _sys
+
+if "pytest" not in _sys.modules and not os.environ.get("DISABLE_DOTENV_AUTOLOAD"):
+    try:
+        from dotenv import load_dotenv
+
+        _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+        if _ENV_PATH.exists():
+            load_dotenv(_ENV_PATH, override=False)
+    except ImportError:  # python-dotenv not installed (e.g. minimal CI)
+        pass
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api.admin import router as admin_router
 from backend.api.auth import router as auth_router
 from backend.api.runs import router as runs_router
 
@@ -46,6 +64,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(auth_router)
     app.include_router(runs_router)
+    app.include_router(admin_router)
     return app
 
 

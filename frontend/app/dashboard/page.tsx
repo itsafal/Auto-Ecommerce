@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AgentFeed } from "@/components/AgentFeed";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { LaunchScore } from "@/components/LaunchScore";
+import { ModelPicker } from "@/components/ModelPicker";
 import {
   getCurrentUser,
   getRun,
@@ -231,6 +232,10 @@ export default function DashboardPage() {
         <button onClick={handleTrigger} disabled={isTriggering}>
           {isTriggering ? "Starting..." : "Trigger Agent Run"}
         </button>
+      </section>
+
+      <section className={styles.controlPanel}>
+        <ModelPicker />
       </section>
 
       {error ? <p className={styles.error}>{error}</p> : null}

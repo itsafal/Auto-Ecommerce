@@ -10,6 +10,8 @@ dependencies = [
   "pytest>=8",
   "uvicorn>=0.30",
   "clickhouse-connect>=0.7",
+  "anthropic>=0.40",
+  "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
