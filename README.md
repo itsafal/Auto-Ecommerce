@@ -64,6 +64,12 @@ Backend dependencies:
 uv sync
 ```
 
+Backend dependencies with the open-source Temporal Python SDK:
+
+```bash
+uv sync --extra temporal
+```
+
 Frontend dependencies:
 
 ```bash
@@ -111,6 +117,62 @@ Open:
 - Signup: `http://localhost:3000/signup`
 - Login: `http://localhost:3000/login`
 - Fixture storefront: `http://localhost:3000/store/magneticmount`
+
+## Local Temporal
+
+Temporal Cloud is not required for local development. Use the open-source Temporal SDK with a local Temporal server.
+
+Install the backend Temporal extra:
+
+```bash
+uv sync --extra temporal
+```
+
+Start a local Temporal dev server in a separate terminal if you have the Temporal CLI installed:
+
+```bash
+temporal server start-dev --ip 127.0.0.1 --port 7233
+```
+
+Start the worker:
+
+```bash
+USE_TEMPORAL=true TEMPORAL_ADDRESS=127.0.0.1:7233 TEMPORAL_NAMESPACE=default uv run python -m backend.workflows.worker
+```
+
+Start the API with Temporal enabled:
+
+```bash
+USE_CLICKHOUSE=false USE_AGENT_FIXTURES=true USE_TEMPORAL=true TEMPORAL_ADDRESS=127.0.0.1:7233 TEMPORAL_NAMESPACE=default uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+If you do not have the Temporal CLI installed, the test suite and Temporal SDK test environment can still validate the worker/workflow code without any cloud account.
+
+## Render Deployment
+
+This repo includes `render.yaml` for two Render web services:
+
+- `auto-ecommerce-backend`: Python/FastAPI service
+- `auto-ecommerce-frontend`: Node/Next.js service
+
+Create a Render Blueprint from this repository's `main` branch. After Render creates the services, set the frontend environment variable:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://YOUR-BACKEND-SERVICE.onrender.com
+```
+
+Use the public URL of the backend service Render created. Render does not support interpolating one service's public URL into another service's build-time env var in `render.yaml`, so this value must be set in the frontend service settings before deploying the frontend.
+
+For fixture-mode demos on Render, leave:
+
+```env
+USE_CLICKHOUSE=false
+USE_TEMPORAL=false
+USE_AGENT_FIXTURES=true
+NEXT_PUBLIC_USE_MOCKS=false
+```
+
+For real ClickHouse persistence, set `USE_CLICKHOUSE=true` on the backend service and fill in the `CLICKHOUSE_*` secret values in Render. Do not put real secrets in `render.yaml` or `.env.example`.
 
 ## Smoke Test
 

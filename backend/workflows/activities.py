@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
 
 from backend.schemas import (
@@ -35,12 +36,19 @@ def slugify_product(product_name: str) -> str:
     return "".join(ch for ch in product_name.lower() if ch.isalnum())
 
 
-def make_event(agent_name: AgentName, event_type: EventType, message: str, payload: dict | None = None) -> AgentEvent:
+def make_event(
+    agent_name: AgentName,
+    event_type: EventType,
+    message: str,
+    payload: dict | None = None,
+    timestamp: datetime | None = None,
+) -> AgentEvent:
     return AgentEvent(
         agent_name=agent_name,
         event_type=event_type,
         message=message,
         payload=payload or {},
+        **({"timestamp": timestamp} if timestamp is not None else {}),
     )
 
 
@@ -126,78 +134,91 @@ async def create_store_activity(
     )
 
 
-async def execute_fixture_launch(workflow_input: WorkflowInput) -> WorkflowResult:
-    events: list[AgentEvent] = []
-
-    research = await research_activity(workflow_input.product_name)
-    events.append(
+def build_launch_result(
+    workflow_input: WorkflowInput,
+    research: ResearchOutput,
+    buyer: BuyerOutput,
+    risk: RiskOutput,
+    advertising: AdvertisingOutput,
+    score: LaunchScoreOutput,
+    store: StoreOutput,
+    status: RunStatus,
+    timestamp: datetime | None = None,
+) -> WorkflowResult:
+    events = [
         make_event(
             AgentName.research,
             EventType.completed,
             f"Research completed with trend score {research.trend_score}",
             {"trend_score": research.trend_score, "confidence": research.confidence},
-        )
-    )
-
-    buyer = await buyer_activity(research)
-    events.append(
+            timestamp=timestamp,
+        ),
         make_event(
             AgentName.buyer,
             EventType.completed,
             f"Buyer selected {buyer.supplier_name} with confidence {buyer.confidence_score}",
             {"supplier_confidence": buyer.confidence_score, "margin_score": buyer.margin_score},
-        )
-    )
-
-    risk = await legal_risk_activity(research, buyer)
-    events.append(
+            timestamp=timestamp,
+        ),
         make_event(
             AgentName.legal_risk,
             EventType.completed,
             f"Legal risk completed with risk score {risk.risk_score}",
             {"cleared": risk.cleared, "risk_score": risk.risk_score},
-        )
-    )
-
-    advertising = await advertising_activity(research, buyer, risk)
-    events.append(
+            timestamp=timestamp,
+        ),
         make_event(
             AgentName.advertising,
             EventType.completed,
             f"Advertising generated storefront copy for {advertising.product_name}",
             {"product_name": advertising.product_name, "tagline": advertising.tagline},
-        )
-    )
-
-    score = await score_launch_activity(research, buyer, risk)
-    events.append(
+            timestamp=timestamp,
+        ),
         make_event(
             AgentName.score_launch,
             EventType.completed,
             f"Launch score is {score.launch_score} with decision {score.decision}",
             {"launch_score": score.launch_score, "decision": score.decision},
-        )
-    )
-
-    store = await create_store_activity(workflow_input, advertising, buyer)
-    events.append(
+            timestamp=timestamp,
+        ),
         make_event(
             AgentName.store_creator,
             EventType.completed,
             f"Store created at {store.store_url}",
             {"store_url": store.store_url, "slug": store.slug},
-        )
-    )
+            timestamp=timestamp,
+        ),
+    ]
 
     run = LaunchRun(
         run_id=workflow_input.run_id,
         temporal_workflow_id=workflow_input.temporal_workflow_id,
         product_name=workflow_input.product_name,
         slug=store.slug,
-        status=RunStatus.fallback_completed,
+        status=status,
         launch_score=score.launch_score,
         decision=score.decision,
         store_url=store.store_url,
         error=None,
     )
     return WorkflowResult(run=run, events=events)
+
+
+async def execute_fixture_launch(workflow_input: WorkflowInput) -> WorkflowResult:
+    research = await research_activity(workflow_input.product_name)
+    buyer = await buyer_activity(research)
+    risk = await legal_risk_activity(research, buyer)
+    advertising = await advertising_activity(research, buyer, risk)
+    score = await score_launch_activity(research, buyer, risk)
+    store = await create_store_activity(workflow_input, advertising, buyer)
+
+    return build_launch_result(
+        workflow_input=workflow_input,
+        research=research,
+        buyer=buyer,
+        risk=risk,
+        advertising=advertising,
+        score=score,
+        store=store,
+        status=RunStatus.fallback_completed,
+    )

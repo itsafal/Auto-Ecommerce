@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+from uuid import UUID
 from fastapi.testclient import TestClient
 
+from backend.api.runs import _persist_temporal_result
 from backend.main import app
+from backend.schemas import WorkflowInput
 from backend.store import run_store
+from backend.workflows.activities import execute_fixture_launch
 
 
 def setup_function() -> None:
@@ -114,3 +119,46 @@ def test_cors_allows_local_dashboard_preflight() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_temporal_result_persistence_updates_run_and_events(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    client = TestClient(app)
+    trigger = client.post("/api/demo/trigger", json={"product_name": "Portable Power Station"}).json()
+    run_id = trigger["run_id"]
+    workflow_input = WorkflowInput(
+        run_id=run_id,
+        product_name="Portable Power Station",
+        temporal_workflow_id=trigger["temporal_workflow_id"],
+    )
+    result = asyncio.run(execute_fixture_launch(workflow_input))
+
+    class Handle:
+        async def result(self):
+            return result
+
+    run_store.set_events(result.run.run_id, [])
+    asyncio.run(_persist_temporal_result(Handle(), result.run.run_id))
+
+    run = client.get(f"/api/runs/{run_id}").json()
+    events = client.get(f"/api/runs/{run_id}/events").json()["events"]
+    assert run["status"] == "fallback_completed"
+    assert run["store_url"] == "https://portablepowerstation.fastaisolution.com"
+    assert len(events) == 6
+
+
+def test_temporal_result_persistence_marks_failures(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    client = TestClient(app)
+    trigger = client.post("/api/demo/trigger", json={"product_name": "Mini Portable Projector"}).json()
+    run_id = trigger["run_id"]
+
+    class Handle:
+        async def result(self):
+            raise RuntimeError("workflow failed")
+
+    asyncio.run(_persist_temporal_result(Handle(), UUID(run_id)))
+
+    run = client.get(f"/api/runs/{run_id}").json()
+    assert run["status"] == "failed"
+    assert "workflow failed" in run["error"]

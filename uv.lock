@@ -52,7 +52,7 @@ dependencies = [
 
 [package.optional-dependencies]
 temporal = [
-    { name = "temporalio" },
+    { name = "temporalio", extra = ["pydantic"] },
 ]
 
 [package.metadata]
@@ -62,7 +62,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pytest", specifier = ">=8" },
-    { name = "temporalio", marker = "extra == 'temporal'", specifier = ">=1.8" },
+    { name = "temporalio", extras = ["pydantic"], marker = "extra == 'temporal'", specifier = ">=1.8" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
 provides-extras = ["temporal"]
@@ -488,6 +488,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8c/5d/358065040e6f0cedbf669acd333622999eec737ff868ca7829d727b77746/temporalio-1.27.2-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:805f3de4d193dec52e040e41dbfc9ab44be0206d2e81142ceefaf7b7208058d1", size = 14252199, upload-time = "2026-05-14T02:17:36.972Z" },
     { url = "https://files.pythonhosted.org/packages/72/8a/85d2eab07c3e23fc1124203e76857c69ab9b22d8ccebad0835e294edb754/temporalio-1.27.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5bc996cb501b8a918f50037ccee6facb05bb70984acada4c2a3e01f5e7957a38", size = 14779945, upload-time = "2026-05-14T02:18:05.513Z" },
     { url = "https://files.pythonhosted.org/packages/67/81/c9b08609e2a92ecf62c97c59cabfa0608337c8d5cc9941eed5d9a7778840/temporalio-1.27.2-cp310-abi3-win_amd64.whl", hash = "sha256:62a84ae9a60c17932971e4ca3b0f3cd6f32f173b8183e759989376503fb95af6", size = 14981897, upload-time = "2026-05-14T02:17:27.333Z" },
+]
+
+[package.optional-dependencies]
+pydantic = [
+    { name = "pydantic" },
 ]
 
 [[package]]

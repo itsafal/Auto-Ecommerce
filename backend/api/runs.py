@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import APIRouter, HTTPException
@@ -12,6 +13,7 @@ from backend.schemas import (
     RunStatus,
     StoreOutput,
     WorkflowInput,
+    WorkflowResult,
 )
 from backend.settings import get_settings
 from backend.store import run_store
@@ -58,16 +60,22 @@ async def _start_launch(request: LaunchRequest) -> LaunchTriggerResponse:
     if settings.use_temporal:
         try:
             from temporalio.client import Client
+            from temporalio.contrib.pydantic import pydantic_data_converter
         except ImportError as exc:
             raise HTTPException(status_code=500, detail="Temporal is enabled but temporalio is not installed.") from exc
 
-        client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
-        await client.start_workflow(
+        client = await Client.connect(
+            settings.temporal_address,
+            namespace=settings.temporal_namespace,
+            data_converter=pydantic_data_converter,
+        )
+        handle = await client.start_workflow(
             "LaunchStoreWorkflow",
             workflow_input,
             id=temporal_workflow_id,
             task_queue=settings.temporal_task_queue,
         )
+        asyncio.create_task(_persist_temporal_result(handle, run_id))
     else:
         result = await execute_fixture_launch(workflow_input)
         run_store.upsert_run(result.run)
@@ -78,6 +86,21 @@ async def _start_launch(request: LaunchRequest) -> LaunchTriggerResponse:
         status=RunStatus.started,
         temporal_workflow_id=temporal_workflow_id,
     )
+
+
+async def _persist_temporal_result(handle, run_id: UUID) -> None:
+    try:
+        result: WorkflowResult = await handle.result()
+    except Exception as exc:
+        run = run_store.get_run(run_id)
+        if run is not None:
+            run.status = RunStatus.failed
+            run.error = str(exc)
+            run_store.upsert_run(run)
+        return
+
+    run_store.upsert_run(result.run)
+    run_store.set_events(result.run.run_id, result.events)
 
 
 @router.post("/demo/trigger", response_model=LaunchTriggerResponse)
