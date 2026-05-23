@@ -147,6 +147,32 @@ def test_temporal_result_persistence_updates_run_and_events(monkeypatch) -> None
     assert len(events) == 6
 
 
+def test_temporal_result_persistence_accepts_serialized_workflow_result(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    client = TestClient(app)
+    trigger = client.post("/api/demo/trigger", json={"product_name": "Portable Power Station"}).json()
+    run_id = trigger["run_id"]
+    workflow_input = WorkflowInput(
+        run_id=run_id,
+        product_name="Portable Power Station",
+        temporal_workflow_id=trigger["temporal_workflow_id"],
+    )
+    result = asyncio.run(execute_fixture_launch(workflow_input))
+
+    class Handle:
+        async def result(self):
+            return result.model_dump(mode="json")
+
+    run_store.set_events(result.run.run_id, [])
+    asyncio.run(_persist_temporal_result(Handle(), result.run.run_id))
+
+    run = client.get(f"/api/runs/{run_id}").json()
+    events = client.get(f"/api/runs/{run_id}/events").json()["events"]
+    assert run["status"] == "fallback_completed"
+    assert run["store_url"] == "https://portablepowerstation.fastaisolution.com"
+    assert len(events) == 6
+
+
 def test_temporal_result_persistence_marks_failures(monkeypatch) -> None:
     monkeypatch.setenv("USE_TEMPORAL", "false")
     client = TestClient(app)

@@ -21,6 +21,7 @@ class Settings:
     demo_mode: bool = True
     auth_secret: str = "dev-auth-secret-change-me"
     auth_token_ttl_minutes: int = 60 * 24 * 7
+    agent_stream_delay_ms: int = 0
 
 
 def get_settings() -> Settings:
@@ -33,4 +34,5 @@ def get_settings() -> Settings:
         demo_mode=_env_bool("DEMO_MODE", True),
         auth_secret=os.getenv("AUTH_SECRET", "dev-auth-secret-change-me"),
         auth_token_ttl_minutes=int(os.getenv("AUTH_TOKEN_TTL_MINUTES", str(60 * 24 * 7))),
+        agent_stream_delay_ms=int(os.getenv("AGENT_STREAM_DELAY_MS", "0")),
     )

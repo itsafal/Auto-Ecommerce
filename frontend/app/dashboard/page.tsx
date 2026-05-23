@@ -52,15 +52,10 @@ export default function DashboardPage() {
     setIsTriggering(true);
     setError(null);
     setEvents([]);
+    setRun(null);
     try {
       const response = await triggerAgentRun(productName);
       setRunId(response.run_id);
-      const [nextRun, nextEvents] = await Promise.all([
-        getRun(response.run_id),
-        getRunEvents(response.run_id)
-      ]);
-      setRun(nextRun);
-      setEvents(nextEvents.events);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to trigger agent run");
     } finally {
@@ -73,17 +68,32 @@ export default function DashboardPage() {
       return;
     }
 
-    const timer = window.setInterval(async () => {
+    const terminalStatuses = new Set(["completed", "failed", "fallback_completed"]);
+    let cancelled = false;
+
+    const tick = async () => {
       try {
         const [nextRun, nextEvents] = await Promise.all([getRun(runId), getRunEvents(runId)]);
+        if (cancelled) return;
         setRun(nextRun);
         setEvents(nextEvents.events);
+        if (terminalStatuses.has(nextRun.status)) {
+          window.clearInterval(timer);
+        }
       } catch {
-        setError("Polling failed. Retrying with latest known run state.");
+        if (!cancelled) {
+          setError("Polling failed. Retrying with latest known run state.");
+        }
       }
-    }, 1500);
+    };
 
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(tick, 800);
+    tick();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [runId]);
 
   const visibleRun = run ?? mockRun;

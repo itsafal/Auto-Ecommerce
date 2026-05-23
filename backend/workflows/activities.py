@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
+from typing import Awaitable, Callable
 from uuid import uuid4
 
 from backend.schemas import (
@@ -222,3 +224,148 @@ async def execute_fixture_launch(workflow_input: WorkflowInput) -> WorkflowResul
         store=store,
         status=RunStatus.fallback_completed,
     )
+
+
+EventSink = Callable[[AgentEvent], Awaitable[None] | None]
+ProgressSink = Callable[[LaunchRun], Awaitable[None] | None]
+
+
+async def _emit(sink: EventSink | None, event: AgentEvent) -> None:
+    if sink is None:
+        return
+    result = sink(event)
+    if asyncio.iscoroutine(result):
+        await result
+
+
+async def _progress(sink: ProgressSink | None, run: LaunchRun) -> None:
+    if sink is None:
+        return
+    result = sink(run)
+    if asyncio.iscoroutine(result):
+        await result
+
+
+_RUNNING_MESSAGES: dict[AgentName, str] = {
+    AgentName.research: "Scanning trend signals and competitor pricing...",
+    AgentName.buyer: "Negotiating with suppliers and checking margins...",
+    AgentName.legal_risk: "Reviewing compliance and risk exposure...",
+    AgentName.advertising: "Drafting storefront copy and hero creative...",
+    AgentName.score_launch: "Calculating final launch score...",
+    AgentName.store_creator: "Provisioning storefront and DNS...",
+}
+
+
+async def execute_streaming_launch(
+    workflow_input: WorkflowInput,
+    *,
+    delay_ms: int,
+    on_event: EventSink | None = None,
+    on_progress: ProgressSink | None = None,
+) -> WorkflowResult:
+    """Run the fixture pipeline emitting `running` + `completed` events per agent.
+
+    Used by the API in real-time mode so the dashboard can render progress as it
+    happens. The terminal `WorkflowResult` is also returned for callers that want
+    a single snapshot at the end (e.g. Temporal persistence).
+    """
+
+    delay = max(delay_ms, 0) / 1000.0
+    base_run = LaunchRun(
+        run_id=workflow_input.run_id,
+        temporal_workflow_id=workflow_input.temporal_workflow_id,
+        product_name=workflow_input.product_name,
+        slug=slugify_product(workflow_input.product_name),
+        status=RunStatus.running,
+    )
+    await _progress(on_progress, base_run)
+
+    async def _step(agent: AgentName, runner):
+        await _emit(
+            on_event,
+            make_event(agent, EventType.running, _RUNNING_MESSAGES[agent]),
+        )
+        if delay:
+            await asyncio.sleep(delay)
+        return await runner()
+
+    research = await _step(AgentName.research, lambda: research_activity(workflow_input.product_name))
+    await _emit(
+        on_event,
+        make_event(
+            AgentName.research,
+            EventType.completed,
+            f"Research completed with trend score {research.trend_score}",
+            {"trend_score": research.trend_score, "confidence": research.confidence},
+        ),
+    )
+
+    buyer = await _step(AgentName.buyer, lambda: buyer_activity(research))
+    await _emit(
+        on_event,
+        make_event(
+            AgentName.buyer,
+            EventType.completed,
+            f"Buyer selected {buyer.supplier_name} with confidence {buyer.confidence_score}",
+            {"supplier_confidence": buyer.confidence_score, "margin_score": buyer.margin_score},
+        ),
+    )
+
+    risk = await _step(AgentName.legal_risk, lambda: legal_risk_activity(research, buyer))
+    await _emit(
+        on_event,
+        make_event(
+            AgentName.legal_risk,
+            EventType.completed,
+            f"Legal risk completed with risk score {risk.risk_score}",
+            {"cleared": risk.cleared, "risk_score": risk.risk_score},
+        ),
+    )
+
+    advertising = await _step(
+        AgentName.advertising, lambda: advertising_activity(research, buyer, risk)
+    )
+    await _emit(
+        on_event,
+        make_event(
+            AgentName.advertising,
+            EventType.completed,
+            f"Advertising generated storefront copy for {advertising.product_name}",
+            {"product_name": advertising.product_name, "tagline": advertising.tagline},
+        ),
+    )
+
+    score = await _step(AgentName.score_launch, lambda: score_launch_activity(research, buyer, risk))
+    await _emit(
+        on_event,
+        make_event(
+            AgentName.score_launch,
+            EventType.completed,
+            f"Launch score is {score.launch_score} with decision {score.decision}",
+            {"launch_score": score.launch_score, "decision": score.decision},
+        ),
+    )
+
+    store = await _step(AgentName.store_creator, lambda: create_store_activity(workflow_input, advertising, buyer))
+    await _emit(
+        on_event,
+        make_event(
+            AgentName.store_creator,
+            EventType.completed,
+            f"Store created at {store.store_url}",
+            {"store_url": store.store_url, "slug": store.slug},
+        ),
+    )
+
+    result = build_launch_result(
+        workflow_input=workflow_input,
+        research=research,
+        buyer=buyer,
+        risk=risk,
+        advertising=advertising,
+        score=score,
+        store=store,
+        status=RunStatus.fallback_completed,
+    )
+    await _progress(on_progress, result.run)
+    return result
