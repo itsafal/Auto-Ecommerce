@@ -21,7 +21,7 @@
 7. **Datadog dashboard lights up** — shows agent activity timeline, store health, API call traces, order pipeline
 8. **Bias mechanism surfaces** — system shows a "near-miss" from a previously failed category that's now worth retrying (knowledge compounding)
 9. **Launch decision score appears** — dashboard shows trend score, margin score, supplier confidence, compliance risk, and final launch/no-launch decision
-10. **Run timeline persists** — every agent event is saved under one `run_id`, visible in the dashboard, ClickHouse, and Datadog traces
+10. **Temporal workflow persists the run** — every long-running agent step is a Temporal activity under one `run_id`, visible in the dashboard, ClickHouse, and Datadog traces
 
 Demo runtime: ~7 minutes. Everything is scripted to trigger live, with pre-warmed state as fallback.
 
@@ -33,12 +33,15 @@ Demo runtime: ~7 minutes. Everything is scripted to trigger live, with pre-warme
 [Demo Trigger / Nimble Trend Signal]
               |
               v
-[Run Orchestrator: run_id, status, events, fallbacks]
+[FastAPI Run API: create run_id, start Temporal workflow]
               |
               v
-[Research] -> [Buyer] -> [Legal] -> [Advertising] -> [Store]
-              |          |          |             |
-              v          v          v             v
+[Temporal LaunchStoreWorkflow: retries, durable state, fallbacks]
+              |
+              v
+[Research Activity] -> [Buyer Activity] -> [Legal Activity] -> [Advertising Activity] -> [Store Activity]
+              |               |                 |                       |
+              v               v                 v                       v
         [Launch Scoring + Supplier Confidence + Risk Flags]
               |
               v
@@ -47,11 +50,60 @@ Demo runtime: ~7 minutes. Everything is scripted to trigger live, with pre-warme
 
 **Backend**: Python + FastAPI  
 **Frontend**: Next.js (React) — single template, AI populates content; subdomain-routed  
-**Agents**: Claude SDK (claude-opus-4-7 with adaptive thinking) + Gemini fallback  
+**Async orchestration**: Temporal — durable workflows, activity retries, worker execution  
+**Agents**: Claude SDK for all agents  
 **DB**: ClickHouse Cloud — columnar storage for business nodes, agent logs, performance metrics  
 **Scraping**: Nimble API (primary trend detection) + Scrapling (supplemental)  
 **Observability**: Datadog APM + custom dashboards  
 **Domain**: `fastaisolution.com` via GoDaddy — each store gets `{product-slug}.fastaisolution.com`  
+**Deployment**: Render for frontend, FastAPI backend, Temporal worker, and scheduled trend cron  
+
+---
+
+## Temporal Async Workflow Architecture
+
+FastAPI should not hold a single HTTP request open while multiple agents call Claude, Nimble, supplier sources, ClickHouse, and store creation. FastAPI creates a `run_id`, starts a Temporal workflow, and immediately returns the `run_id` to the dashboard.
+
+### Workflow shape:
+
+```text
+LaunchStoreWorkflow(run_id, product_input)
+        |
+        v
+ResearchActivity
+        |
+        v
+BuyerActivity
+        |
+        v
+LegalRiskActivity
+        |
+        v
+AdvertisingActivity
+        |
+        v
+ScoreLaunchActivity
+        |
+        v
+CreateStoreActivity
+```
+
+### Why Temporal is load-bearing:
+
+- Agent runs survive FastAPI restarts.
+- Claude/Nimble/supplier calls get timeout and retry policies.
+- Each agent step is visible as a workflow activity.
+- The dashboard can follow progress by `run_id`.
+- Demo fallback usage is recorded as a real workflow event.
+- Scheduled trend monitoring and manual UI triggers use the same workflow path.
+
+### Temporal rules:
+
+- Workflow code only orchestrates. It must stay deterministic.
+- Claude, Nimble, ClickHouse, Datadog, supplier lookup, image generation, and store creation happen inside activities.
+- Each activity writes `agent_events` rows before and after execution.
+- Each activity emits Datadog tags for `run_id`, `agent`, `product_slug`, and `demo_mode`.
+- Use Temporal Cloud for hackathon deployment if possible. Use local Temporal via Docker Compose for development.
 
 ---
 
