@@ -126,6 +126,45 @@ class InMemoryRunStore:
             return []
         return self._fetch_events_from_clickhouse(run_id)
 
+    def record_decision(
+        self,
+        run_id: UUID,
+        agent_name: str,
+        action: str,
+        input_summary: str = "",
+        output_summary: str = "",
+        latency_ms: int = 0,
+        model_used: str = "",
+    ) -> None:
+        """Append an entry to the analytics-grade agent_decisions table.
+
+        Best-effort: failures are logged but never raised so they can't
+        break the run path.
+        """
+        if not use_clickhouse():
+            return
+        try:
+            client = get_client()
+            if not hasattr(client, "write_agent_decision"):
+                return
+            client.write_agent_decision(
+                run_id=str(run_id),
+                agent_name=agent_name,
+                action=action,
+                input_summary=input_summary,
+                output_summary=output_summary,
+                latency_ms=latency_ms,
+                model_used=model_used,
+            )
+        except Exception as exc:
+            logger.error(
+                "[run_store] write_agent_decision FAILED for run %s agent %s: %s",
+                run_id,
+                agent_name,
+                exc,
+                exc_info=True,
+            )
+
     # ----- ClickHouse mirror (dual-write side) -----
 
     def _mirror_run(self, run: LaunchRun, is_new: bool) -> None:

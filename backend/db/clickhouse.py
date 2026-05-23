@@ -131,6 +131,31 @@ class ClickHouseClient:
             "message": message, "payload": payload or {}, "business_id": business_id,
         }
 
+    def write_agent_decision(
+        self,
+        run_id,
+        agent_name: str,
+        action: str,
+        input_summary: str = "",
+        output_summary: str = "",
+        latency_ms: int = 0,
+        model_used: str = "",
+        business_id=None,
+    ):
+        rid = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
+        # business_id is non-null in the schema; use the zero-UUID when unknown.
+        bid_raw = business_id if business_id is not None else "00000000-0000-0000-0000-000000000000"
+        bid = uuid.UUID(bid_raw) if isinstance(bid_raw, str) else bid_raw
+        self._client.insert(
+            "agent_decisions",
+            [[uuid.uuid4(), bid, rid, agent_name, action,
+              input_summary[:500], output_summary[:500], int(latency_ms), model_used]],
+            column_names=[
+                "id", "business_id", "run_id", "agent_name", "action",
+                "input_summary", "output_summary", "latency_ms", "model_used",
+            ],
+        )
+
     def get_events(self, run_id):
         return list(
             self._client.query(
