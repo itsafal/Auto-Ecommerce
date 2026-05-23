@@ -16,9 +16,12 @@ from backend.schemas import (
     BuyerOutput,
     Decision,
     EventType,
+    FAQItem,
     LaunchRun,
     LaunchScoreOutput,
+    ProductVariant,
     ResearchOutput,
+    Review,
     RiskOutput,
     RunStatus,
     StoreOutput,
@@ -40,7 +43,13 @@ except ImportError:
 
 
 def slugify_product(product_name: str) -> str:
-    return "".join(ch for ch in product_name.lower() if ch.isalnum())
+    cleaned = re.sub(r"[^a-z0-9\s]", "", product_name.lower()).strip()
+    words = cleaned.split()
+    # Keep up to first 3 words, cap at 30 chars for sane subdomains.
+    short = "".join(words[:3])[:30]
+    if not short:
+        short = "store"
+    return short
 
 
 def build_store_url(slug: str, base_domain: str | None = None) -> str:
@@ -347,32 +356,130 @@ async def legal_risk_activity(research: ResearchOutput, buyer: BuyerOutput) -> R
     )
 
 
+def _fallback_storefront_assets(
+    product_name: str, profile: dict, buyer: BuyerOutput, risk: RiskOutput
+) -> dict:
+    base_price = round(max(buyer.unit_cost / max(0.2, 1 - buyer.estimated_margin), 19.99), 2)
+    title = product_name.title()
+    features = [
+        f"Engineered for everyday {profile['category'].replace('_', ' ')} use",
+        "Premium materials with a clean, modern finish",
+        f"Ships in {buyer.shipping_days} days with tracked delivery",
+        "30-day satisfaction guarantee and easy returns",
+        "Trusted by early adopters and reviewers",
+    ]
+    specs = {
+        "Category": profile["category"].replace("_", " ").title(),
+        "Shipping": f"{buyer.shipping_days} days, tracked",
+        "Warranty": "1 year limited",
+        "Returns": "30 days, no questions",
+    }
+    variants = [
+        {
+            "name": f"{profile['brand']} Standard",
+            "price": base_price,
+            "blurb": "The everyday pick. Clean look, full feature set.",
+            "badge": "Most popular",
+            "accent": "#0f766e",
+        },
+        {
+            "name": f"{profile['brand']} Pro",
+            "price": round(base_price * 1.35, 2),
+            "blurb": "Upgraded build, longer battery, premium finish.",
+            "badge": "Best value",
+            "accent": "#1d4ed8",
+        },
+        {
+            "name": f"{profile['brand']} Mini",
+            "price": round(base_price * 0.75, 2),
+            "blurb": "Compact size for travel and tight spaces.",
+            "badge": "Travel",
+            "accent": "#9333ea",
+        },
+        {
+            "name": f"{profile['brand']} Bundle",
+            "price": round(base_price * 1.85, 2),
+            "blurb": "Two units + accessories. Save 18% vs single.",
+            "badge": "Save 18%",
+            "accent": "#b45309",
+        },
+    ]
+    faq = [
+        {"question": f"How long does shipping take?", "answer": f"Orders ship in {buyer.shipping_days} days with full tracking."},
+        {"question": "What is the return policy?", "answer": "30-day no-questions returns. We cover return shipping."},
+        {"question": f"Is the {title} covered by warranty?", "answer": "Yes, a 1 year limited warranty on parts and workmanship."},
+        {"question": "Do you ship internationally?", "answer": "We ship to the US, CA, UK, AU, and EU member countries."},
+    ]
+    reviews = [
+        {"name": "Avery K.", "rating": 5.0, "text": f"The {title.lower()} replaced two products I had cluttering my space. Worth it."},
+        {"name": "Jordan M.", "rating": 4.5, "text": "Build quality is way better than I expected at this price. Recommend."},
+        {"name": "Priya S.", "rating": 5.0, "text": "Arrived fast, set up in minutes, working great two weeks in."},
+    ]
+    shipping_note = f"Ships in {buyer.shipping_days} days · Tracked delivery"
+    return {
+        "features": features,
+        "specs": specs,
+        "variants": variants,
+        "faq": faq,
+        "reviews": reviews,
+        "shipping_note": shipping_note,
+    }
+
+
 @activity.defn
 async def advertising_activity(research: ResearchOutput, buyer: BuyerOutput, risk: RiskOutput) -> AdvertisingOutput:
+    profile = _product_profile(research.product_name)
+    fallback_assets = _fallback_storefront_assets(research.product_name, profile, buyer, risk)
     prompt = f"""
-Return JSON only for ecommerce ad copy:
+Return JSON only for an ecommerce storefront:
 {{
-  "product_name": "brandable product name",
+  "product_name": "brandable product name (2-3 words)",
   "tagline": "under 9 words",
   "description": "two benefit-focused sentences",
   "cta_text": "short CTA",
   "hero_image_prompt": "specific product photo prompt",
-  "hero_image_url": "/demo/example.png"
+  "hero_image_url": "/demo/example.png",
+  "features": ["4-5 short benefit bullets, each under 12 words"],
+  "specs": {{"Material": "...", "Dimensions": "...", "Weight": "...", "Battery": "..."}},
+  "variants": [
+    {{"name": "...", "price": 29.99, "blurb": "1 line", "badge": "Most popular", "accent": "#0f766e"}}
+  ],
+  "faq": [{{"question": "...", "answer": "..."}}],
+  "reviews": [{{"name": "First L.", "rating": 4.8, "text": "1-2 sentence review"}}],
+  "shipping_note": "Ships in N days · Tracked delivery"
 }}
+Provide 4 distinct variants (Standard, Pro, Mini, Bundle) with prices spanning ~0.7x-1.9x base.
+Base price target: {round(max(buyer.unit_cost / max(0.2, 1 - buyer.estimated_margin), 19.99), 2)}
 Product: {research.product_name}
 Category: {research.category}
 Research: {research.competitor_summary}
 Supplier cost: {buyer.unit_cost}
+Shipping days: {buyer.shipping_days}
 Risk note: {risk.recommendation}
 """.strip()
-    generated = await _gemini_json(prompt)
+    generated = await _gemini_json(prompt, ignore_fixture_flag=True)
     if generated:
+        # Merge: prefer Gemini fields, fall back per-field for anything missing.
+        merged = {
+            "product_name": generated.get("product_name") or profile["brand"],
+            "tagline": generated.get("tagline") or profile["tagline"],
+            "description": generated.get("description") or profile["description"],
+            "cta_text": generated.get("cta_text") or f"Buy Now - Ships in {buyer.shipping_days} days",
+            "hero_image_prompt": generated.get("hero_image_prompt")
+            or f"Clean studio product photo of {research.product_name}, commercial lighting, crisp shadows",
+            "hero_image_url": generated.get("hero_image_url") or profile["hero"],
+            "features": generated.get("features") or fallback_assets["features"],
+            "specs": generated.get("specs") or fallback_assets["specs"],
+            "variants": generated.get("variants") or fallback_assets["variants"],
+            "faq": generated.get("faq") or fallback_assets["faq"],
+            "reviews": generated.get("reviews") or fallback_assets["reviews"],
+            "shipping_note": generated.get("shipping_note") or fallback_assets["shipping_note"],
+        }
         try:
-            return AdvertisingOutput(**generated)
+            return AdvertisingOutput(**merged)
         except Exception:
             pass
 
-    profile = _product_profile(research.product_name)
     return AdvertisingOutput(
         product_name=profile["brand"],
         tagline=profile["tagline"],
@@ -380,6 +487,12 @@ Risk note: {risk.recommendation}
         cta_text=f"Buy Now - Ships in {buyer.shipping_days} days",
         hero_image_prompt=f"Clean studio product photo of {research.product_name}, commercial lighting, crisp shadows",
         hero_image_url=profile["hero"],
+        features=fallback_assets["features"],
+        specs=fallback_assets["specs"],
+        variants=[ProductVariant(**v) for v in fallback_assets["variants"]],
+        faq=[FAQItem(**f) for f in fallback_assets["faq"]],
+        reviews=[Review(**r) for r in fallback_assets["reviews"]],
+        shipping_note=fallback_assets["shipping_note"],
     )
 
 
@@ -408,11 +521,18 @@ async def create_store_activity(
         slug=slug,
         store_url=build_store_url(slug),
         product_name=advertising.product_name,
+        tagline=advertising.tagline,
         description=advertising.description,
         price=retail_price,
         hero_image_url=advertising.hero_image_url,
         supplier=buyer.supplier_name,
         cta_text=advertising.cta_text,
+        features=advertising.features,
+        specs=advertising.specs,
+        variants=advertising.variants,
+        faq=advertising.faq,
+        reviews=advertising.reviews,
+        shipping_note=advertising.shipping_note or f"Ships in {buyer.shipping_days} days",
     )
 
 
@@ -483,7 +603,7 @@ def build_launch_result(
         store_url=store.store_url,
         error=None,
     )
-    return WorkflowResult(run=run, events=events)
+    return WorkflowResult(run=run, events=events, store=store)
 
 
 async def execute_fixture_launch(workflow_input: WorkflowInput) -> WorkflowResult:
@@ -508,6 +628,7 @@ async def execute_fixture_launch(workflow_input: WorkflowInput) -> WorkflowResul
 
 EventSink = Callable[[AgentEvent], Awaitable[None] | None]
 ProgressSink = Callable[[LaunchRun], Awaitable[None] | None]
+StoreSink = Callable[[StoreOutput], Awaitable[None] | None]
 
 
 async def _emit(sink: EventSink | None, event: AgentEvent) -> None:
@@ -522,6 +643,14 @@ async def _progress(sink: ProgressSink | None, run: LaunchRun) -> None:
     if sink is None:
         return
     result = sink(run)
+    if asyncio.iscoroutine(result):
+        await result
+
+
+async def _store_sink(sink: StoreSink | None, store: StoreOutput) -> None:
+    if sink is None:
+        return
+    result = sink(store)
     if asyncio.iscoroutine(result):
         await result
 
@@ -542,6 +671,7 @@ async def execute_streaming_launch(
     delay_ms: int,
     on_event: EventSink | None = None,
     on_progress: ProgressSink | None = None,
+    on_store: StoreSink | None = None,
 ) -> WorkflowResult:
     """Run the fixture pipeline emitting `running` + `completed` events per agent.
 
@@ -627,13 +757,14 @@ async def execute_streaming_launch(
     )
 
     store = await _step(AgentName.store_creator, lambda: create_store_activity(workflow_input, advertising, buyer))
+    await _store_sink(on_store, store)
     await _emit(
         on_event,
         make_event(
             AgentName.store_creator,
             EventType.completed,
             f"Store created at {store.store_url}",
-            {"store_url": store.store_url, "slug": store.slug},
+            {"store_url": store.store_url, "slug": store.slug, "variants": len(store.variants)},
         ),
     )
 

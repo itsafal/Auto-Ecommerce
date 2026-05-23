@@ -4,7 +4,7 @@ import logging
 from uuid import UUID
 
 from backend.db.clickhouse import get_client, use_clickhouse
-from backend.schemas import AgentEvent, LaunchRun
+from backend.schemas import AgentEvent, LaunchRun, StoreOutput
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,19 @@ class InMemoryRunStore:
     def __init__(self) -> None:
         self._runs: dict[UUID, LaunchRun] = {}
         self._events: dict[UUID, list[AgentEvent]] = {}
+        self._stores: dict[str, StoreOutput] = {}
 
     def clear(self) -> None:
         self._runs.clear()
         self._events.clear()
+        self._stores.clear()
+
+    def upsert_store(self, store: StoreOutput) -> StoreOutput:
+        self._stores[store.slug] = store
+        return store
+
+    def get_store(self, slug: str) -> StoreOutput | None:
+        return self._stores.get(slug)
 
     def upsert_run(self, run: LaunchRun) -> LaunchRun:
         existed = run.run_id in self._runs

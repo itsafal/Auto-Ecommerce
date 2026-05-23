@@ -42,15 +42,31 @@ export default function DashboardPage() {
   const [isSessionReady, setIsSessionReady] = useState(useMockMode);
 
   const score = useMemo(() => {
-    if (!run) {
+    if (!run && events.length === 0) {
       return mockScore;
     }
+    const findPayload = (agent: string, type: "running" | "completed" = "completed") =>
+      [...events].reverse().find(
+        (e) => e.agent_name === agent && e.event_type === type
+      )?.payload as Record<string, unknown> | undefined;
+
+    const research = findPayload("research");
+    const buyer = findPayload("buyer");
+    const legal = findPayload("legal_risk");
+
+    const num = (v: unknown, fallback: number): number =>
+      typeof v === "number" ? v : fallback;
+
     return {
       ...mockScore,
-      launch_score: run.launch_score ?? mockScore.launch_score,
-      decision: run.decision ?? mockScore.decision
+      trend_score: num(research?.trend_score, mockScore.trend_score),
+      margin_score: num(buyer?.margin_score, mockScore.margin_score),
+      supplier_confidence: num(buyer?.supplier_confidence, mockScore.supplier_confidence),
+      compliance_risk: num(legal?.risk_score, mockScore.compliance_risk),
+      launch_score: run?.launch_score ?? mockScore.launch_score,
+      decision: run?.decision ?? mockScore.decision
     };
-  }, [run]);
+  }, [run, events]);
 
   useEffect(() => {
     if (useMockMode()) {

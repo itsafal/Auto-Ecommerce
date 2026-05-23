@@ -92,7 +92,10 @@ def test_get_store_returns_generated_storefront(monkeypatch) -> None:
     assert payload["slug"] == "magneticphonemount"
     assert payload["store_url"] == "https://magneticphonemount.fastaisolution.com"
     assert payload["product_name"] == "MagSnap Pro"
-    assert payload["supplier"] == "Demo Supplier 4821"
+    assert payload["supplier"].startswith("Demo Supplier ")
+    assert len(payload["variants"]) >= 3
+    assert len(payload["features"]) >= 3
+    assert len(payload["faq"]) >= 2
 
 
 def test_get_store_keeps_documented_fixture_slug_available() -> None:
