@@ -3,7 +3,7 @@ services:
     name: auto-ecommerce-backend
     runtime: python
     plan: free
-    buildCommand: uv sync --extra temporal
+    buildCommand: pip install uv && uv sync --extra temporal --frozen
     startCommand: uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - name: USE_CLICKHOUSE
@@ -22,6 +22,8 @@ services:
         generateValue: true
       - name: AUTH_TOKEN_TTL_MINUTES
         value: "10080"
+      - name: REQUIRE_AUTH_FOR_RUNS
+        value: "true"
       - name: CLICKHOUSE_HOST
         sync: false
       - name: CLICKHOUSE_PORT
@@ -36,6 +38,8 @@ services:
         value: "true"
       - name: GOOGLE_API_KEY
         sync: false
+      - name: GEMINI_MODEL
+        value: gemini-2.5-flash
       - name: GOOGLE_GENAI_USE_VERTEXAI
         value: "false"
       - name: GOOGLE_CLOUD_PROJECT
@@ -43,6 +47,8 @@ services:
       - name: GOOGLE_CLOUD_LOCATION
         sync: false
       - name: NIMBLE_API_KEY
+        sync: false
+      - name: NIMBLE_API_URL
         sync: false
       - name: DATADOG_API_KEY
         sync: false

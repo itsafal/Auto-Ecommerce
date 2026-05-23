@@ -33,6 +33,14 @@ export const useMockMode = () =>
 
 const apiBaseUrl = () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
+const authHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  const token = window.localStorage.getItem("auto_ecommerce_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export async function triggerAgentRun(productName: string): Promise<TriggerResponse> {
   if (useMockMode()) {
     return {
@@ -44,7 +52,7 @@ export async function triggerAgentRun(productName: string): Promise<TriggerRespo
 
   const response = await fetch(`${apiBaseUrl()}/api/demo/trigger`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ product_name: productName })
   });
   if (!response.ok) {

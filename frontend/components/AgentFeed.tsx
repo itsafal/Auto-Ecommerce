@@ -1,15 +1,6 @@
 import type { AgentEvent } from "@/lib/mock-data";
 import styles from "./AgentFeed.module.css";
 
-const agentLabels: Record<string, string> = {
-  research: "Research",
-  buyer: "Buyer",
-  legal_risk: "Legal / Risk",
-  advertising: "Advertising",
-  score_launch: "Score Launch",
-  store_creator: "Store Creator"
-};
-
 function formatTime(timestamp: string): string {
   try {
     return new Date(timestamp).toLocaleTimeString();
@@ -38,7 +29,7 @@ export function AgentFeed({ events }: { events: AgentEvent[] }) {
               key={`${event.agent_name}-${event.event_type}-${event.timestamp}`}
             >
               <div className={styles.eventHeader}>
-                <strong>{agentLabels[event.agent_name] ?? event.agent_name.replace("_", " ")}</strong>
+                <strong>{event.agent_name.replace("_", " ")}</strong>
                 <span className={styles.status} data-status={event.event_type}>
                   {event.event_type.replace("_", " ")}
                 </span>
