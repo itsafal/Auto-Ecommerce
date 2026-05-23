@@ -18,6 +18,7 @@ from backend.schemas import (
 from backend.settings import get_settings
 from backend.store import run_store
 from backend.workflows.activities import (
+    build_store_url,
     execute_fixture_launch,
     execute_streaming_launch,
     slugify_product,
@@ -30,7 +31,7 @@ def _fixture_store(slug: str, run_id: UUID | None = None) -> StoreOutput:
     return StoreOutput(
         store_id=run_id or uuid5(NAMESPACE_URL, f"auto-ecommerce-store:{slug}"),
         slug=slug,
-        store_url=f"https://{slug}.fastaisolution.com",
+        store_url=build_store_url(slug),
         product_name="MagSnap Pro",
         description="A compact magnetic phone mount built for fast one-handed docking and a cleaner dashboard.",
         price=29.99,

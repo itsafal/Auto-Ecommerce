@@ -38,6 +38,15 @@ def slugify_product(product_name: str) -> str:
     return "".join(ch for ch in product_name.lower() if ch.isalnum())
 
 
+def build_store_url(slug: str, base_domain: str | None = None) -> str:
+    from backend.settings import get_settings
+
+    domain = (base_domain or get_settings().base_domain).strip().lower()
+    host = domain.split(":")[0]
+    scheme = "http" if host in {"localhost", "127.0.0.1"} or host.endswith(".localhost") else "https"
+    return f"{scheme}://{slug}.{domain}"
+
+
 def make_event(
     agent_name: AgentName,
     event_type: EventType,
@@ -126,7 +135,7 @@ async def create_store_activity(
     return StoreOutput(
         store_id=uuid4(),
         slug=slug,
-        store_url=f"https://{slug}.fastaisolution.com",
+        store_url=build_store_url(slug),
         product_name=advertising.product_name,
         description=advertising.description,
         price=29.99,

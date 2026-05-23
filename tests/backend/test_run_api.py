@@ -173,6 +173,51 @@ def test_temporal_result_persistence_accepts_serialized_workflow_result(monkeypa
     assert len(events) == 6
 
 
+def test_streaming_launch_emits_running_then_completed_per_agent() -> None:
+    from backend.workflows.activities import execute_streaming_launch
+
+    run_id = UUID("11111111-1111-1111-1111-111111111111")
+    workflow_input = WorkflowInput(
+        run_id=run_id,
+        product_name="Magnetic Phone Mount",
+        temporal_workflow_id=f"launch-store-{run_id}",
+    )
+    captured: list[tuple[str, str]] = []
+
+    def on_event(event):
+        captured.append((event.agent_name, event.event_type))
+
+    progressed: list[str] = []
+
+    def on_progress(run):
+        progressed.append(run.status)
+
+    asyncio.run(
+        execute_streaming_launch(
+            workflow_input, delay_ms=0, on_event=on_event, on_progress=on_progress
+        )
+    )
+
+    agents = ["research", "buyer", "legal_risk", "advertising", "score_launch", "store_creator"]
+    for agent in agents:
+        assert (agent, "running") in captured, f"missing running for {agent}"
+        assert (agent, "completed") in captured, f"missing completed for {agent}"
+    # Running fires before completed for each agent.
+    for agent in agents:
+        running_idx = captured.index((agent, "running"))
+        completed_idx = captured.index((agent, "completed"))
+        assert running_idx < completed_idx
+    assert "running" in progressed
+    assert progressed[-1] == "fallback_completed"
+
+
+def test_build_store_url_uses_localhost_scheme_for_local_domain(monkeypatch) -> None:
+    from backend.workflows.activities import build_store_url
+
+    assert build_store_url("magneticphonemount", "localhost:3000") == "http://magneticphonemount.localhost:3000"
+    assert build_store_url("magneticphonemount", "fastaisolution.com") == "https://magneticphonemount.fastaisolution.com"
+
+
 def test_temporal_result_persistence_marks_failures(monkeypatch) -> None:
     monkeypatch.setenv("USE_TEMPORAL", "false")
     client = TestClient(app)
