@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+import uuid
 
 from backend.db.memory_store import MemoryStore, get_memory_store
 
@@ -145,6 +146,52 @@ class ClickHouseClient:
                 parameters={"id": from_business_id},
             ).named_results()
         return list(rows)
+
+    def create_user(self, email, password_hash, full_name=""):
+        existing = self.get_user_by_email(email)
+        if existing is not None:
+            raise ValueError("email already registered")
+        user_id = str(uuid.uuid4())
+        normalized_email = email.strip().lower()
+        self._client.insert(
+            "users",
+            [[user_id, normalized_email, password_hash, full_name.strip(), 1]],
+            column_names=["id", "email", "password_hash", "full_name", "is_active"],
+        )
+        return self.get_user_by_email(normalized_email)
+
+    def get_user_by_email(self, email):
+        rows = self._client.query(
+            """
+            SELECT id, email, password_hash, full_name, created_at, last_login_at, is_active
+            FROM users
+            WHERE email = %(email)s AND is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            parameters={"email": email.strip().lower()},
+        ).named_results()
+        return next(iter(rows), None)
+
+    def get_user_by_id(self, user_id):
+        rows = self._client.query(
+            """
+            SELECT id, email, password_hash, full_name, created_at, last_login_at, is_active
+            FROM users
+            WHERE id = %(id)s AND is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            parameters={"id": user_id},
+        ).named_results()
+        return next(iter(rows), None)
+
+    def update_user_login(self, user_id):
+        self._client.command(
+            "ALTER TABLE users UPDATE last_login_at = now() WHERE id = %(id)s",
+            parameters={"id": user_id},
+        )
+        return self.get_user_by_id(user_id)
 
 
 _client: Any = None

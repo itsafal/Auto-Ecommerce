@@ -72,3 +72,45 @@ def test_get_events_returns_ordered_events(monkeypatch) -> None:
         "store_creator",
     ]
     assert all(event["event_type"] == "completed" for event in payload["events"])
+
+
+def test_get_store_returns_generated_storefront(monkeypatch) -> None:
+    monkeypatch.setenv("USE_TEMPORAL", "false")
+    client = TestClient(app)
+    trigger = client.post("/api/demo/trigger", json={"product_name": "Magnetic Phone Mount"}).json()
+    run = client.get(f"/api/runs/{trigger['run_id']}").json()
+
+    response = client.get(f"/api/stores/{run['slug']}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["slug"] == "magneticphonemount"
+    assert payload["store_url"] == "https://magneticphonemount.fastaisolution.com"
+    assert payload["product_name"] == "MagSnap Pro"
+    assert payload["supplier"] == "Demo Supplier 4821"
+
+
+def test_get_store_keeps_documented_fixture_slug_available() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/stores/magneticmount")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["slug"] == "magneticmount"
+    assert payload["store_url"] == "https://magneticmount.fastaisolution.com"
+
+
+def test_cors_allows_local_dashboard_preflight() -> None:
+    client = TestClient(app)
+
+    response = client.options(
+        "/api/demo/trigger",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"

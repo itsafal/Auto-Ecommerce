@@ -93,3 +93,14 @@ CREATE TABLE IF NOT EXISTS business_relationships (
     created_at DateTime DEFAULT now()
 ) ENGINE = MergeTree()
 ORDER BY (from_business_id, relationship_type);
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID,
+    email String,
+    password_hash String,
+    full_name String DEFAULT '',
+    is_active UInt8 DEFAULT 1,
+    created_at DateTime DEFAULT now(),
+    last_login_at Nullable(DateTime)
+) ENGINE = MergeTree()
+ORDER BY (email, created_at, id);

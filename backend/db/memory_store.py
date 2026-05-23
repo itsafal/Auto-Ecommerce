@@ -33,6 +33,7 @@ class MemoryStore:
         self._trend_signals: list[dict[str, Any]] = []
         self._relationships: list[dict[str, Any]] = []
         self._agent_decisions: list[dict[str, Any]] = []
+        self._users: dict[str, dict[str, Any]] = {}
 
     # ----- runs -----
 
@@ -215,6 +216,45 @@ class MemoryStore:
                 decisions = [d for d in decisions if d.get("agent_name") == agent_name]
             return [deepcopy(d) for d in decisions]
 
+    # ----- users / auth -----
+
+    def create_user(self, email: str, password_hash: str, full_name: str = "") -> dict[str, Any]:
+        with self._lock:
+            key = email.strip().lower()
+            if key in self._users:
+                raise ValueError("email already registered")
+            record = {
+                "id": _new_id(),
+                "email": key,
+                "password_hash": password_hash,
+                "full_name": full_name.strip(),
+                "created_at": _utcnow(),
+                "last_login_at": None,
+                "is_active": True,
+            }
+            self._users[key] = record
+            return deepcopy(record)
+
+    def get_user_by_email(self, email: str) -> dict[str, Any] | None:
+        with self._lock:
+            user = self._users.get(email.strip().lower())
+            return deepcopy(user) if user else None
+
+    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            for user in self._users.values():
+                if user["id"] == user_id:
+                    return deepcopy(user)
+            return None
+
+    def update_user_login(self, user_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            for user in self._users.values():
+                if user["id"] == user_id:
+                    user["last_login_at"] = _utcnow()
+                    return deepcopy(user)
+            return None
+
     # ----- maintenance -----
 
     def reset(self) -> None:
@@ -225,6 +265,7 @@ class MemoryStore:
             self._trend_signals.clear()
             self._relationships.clear()
             self._agent_decisions.clear()
+            self._users.clear()
 
 
 _singleton: MemoryStore | None = None

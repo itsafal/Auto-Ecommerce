@@ -19,6 +19,8 @@ class Settings:
     temporal_task_queue: str = "launch-store"
     base_domain: str = "fastaisolution.com"
     demo_mode: bool = True
+    auth_secret: str = "dev-auth-secret-change-me"
+    auth_token_ttl_minutes: int = 60 * 24 * 7
 
 
 def get_settings() -> Settings:
@@ -29,4 +31,6 @@ def get_settings() -> Settings:
         temporal_task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "launch-store"),
         base_domain=os.getenv("BASE_DOMAIN", "fastaisolution.com"),
         demo_mode=_env_bool("DEMO_MODE", True),
+        auth_secret=os.getenv("AUTH_SECRET", "dev-auth-secret-change-me"),
+        auth_token_ttl_minutes=int(os.getenv("AUTH_TOKEN_TTL_MINUTES", str(60 * 24 * 7))),
     )
