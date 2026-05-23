@@ -50,5 +50,10 @@ down:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    pkill -f "uvicorn backend.main:app" 2>/dev/null || true
-    pkill -f "next dev" 2>/dev/null || true
+    for port in {{backend_port}} {{frontend_port}}; do
+      pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+      if [[ -n "$pids" ]]; then
+        echo "Stopping processes on port $port: $pids"
+        kill $pids 2>/dev/null || true
+      fi
+    done
