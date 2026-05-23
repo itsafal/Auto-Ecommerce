@@ -7,7 +7,7 @@ backend:
     USE_CLICKHOUSE="${USE_CLICKHOUSE:-false}" USE_AGENT_FIXTURES="${USE_AGENT_FIXTURES:-true}" USE_TEMPORAL="${USE_TEMPORAL:-false}" uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port {{backend_port}}
 
 frontend:
-    cd frontend && NEXT_PUBLIC_USE_MOCKS="${NEXT_PUBLIC_USE_MOCKS:-false}" NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:{{backend_port}}}" corepack pnpm dev -- -p {{frontend_port}}
+    cd frontend && NEXT_PUBLIC_USE_MOCKS="${NEXT_PUBLIC_USE_MOCKS:-false}" NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:{{backend_port}}}" corepack pnpm exec next dev -p {{frontend_port}}
 
 check-ports:
     #!/usr/bin/env bash
