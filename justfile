@@ -14,7 +14,7 @@ backend-build:
     uv sync --extra temporal --frozen
 
 frontend-build:
-    cd frontend && corepack pnpm install --frozen-lockfile && corepack pnpm build
+    cd frontend && npm exec --yes --package=pnpm@11.2.2 -- pnpm install --frozen-lockfile && npm exec --yes --package=pnpm@11.2.2 -- pnpm build
 
 render-check:
     just backend-build
@@ -27,8 +27,8 @@ render-env:
     @echo
     @echo "Frontend Render service:"
     @echo "  Root dir: frontend"
-    @echo "  Build: corepack pnpm install --frozen-lockfile && corepack pnpm build"
-    @echo "  Start: corepack pnpm exec next start -H 0.0.0.0 -p \\$PORT"
+    @echo "  Build: npm exec --yes --package=pnpm@11.2.2 -- pnpm install --frozen-lockfile && npm exec --yes --package=pnpm@11.2.2 -- pnpm build"
+    @echo "  Start: ./node_modules/.bin/next start -H 0.0.0.0 -p \\$PORT"
     @echo
     @echo "Set NEXT_PUBLIC_API_BASE_URL on the frontend to the backend Render URL."
 

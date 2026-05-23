@@ -67,8 +67,8 @@ services:
     plan: free
     rootDir: frontend
     autoDeploy: false
-    buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm build
-    startCommand: corepack pnpm exec next start -H 0.0.0.0 -p $PORT
+    buildCommand: npm exec --yes --package=pnpm@11.2.2 -- pnpm install --frozen-lockfile && npm exec --yes --package=pnpm@11.2.2 -- pnpm build
+    startCommand: ./node_modules/.bin/next start -H 0.0.0.0 -p $PORT
     envVars:
       - key: NODE_VERSION
         value: "20.19.0"
