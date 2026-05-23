@@ -1,6 +1,5 @@
 # Auto-Ecommerce
-
-AI-powered product testing with a FastAPI backend, a Next.js dashboard/storefront, fixture-backed agent runs, and optional ClickHouse persistence.
+Auto-Ecommerce is an AI-powered system that automatically launches a full e-commerce store to monopolize on niche microtrends before they go mainstream. You give it a product name, and a pipeline of specialized agents does all the work — the Research Agent uses Nimble to detect emerging trend signals across TikTok, Reddit, and search data, while Buyer, Legal, and Advertising agents handle sourcing, compliance, and copy — all orchestrated by a CEO agent. Everything runs on a FastAPI backend with ClickHouse for analytics persistence and Datadog for monitoring, while operators watch the whole pipeline fire in real time through a Next.js dashboard.
 
 ## Prerequisites
 
