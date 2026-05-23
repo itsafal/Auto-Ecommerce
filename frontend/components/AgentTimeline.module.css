@@ -1,0 +1,78 @@
+.panel {
+  padding: 20px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.header span {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.step {
+  min-height: 108px;
+  padding: 14px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.name {
+  display: block;
+  margin-top: 16px;
+  font-weight: 800;
+}
+
+.status {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.step[data-status="running"] .dot,
+.step[data-status="fallback_used"] .dot {
+  background: #b45309;
+}
+
+.step[data-status="completed"] .dot {
+  background: #0f766e;
+}
+
+.step[data-status="failed"] .dot {
+  background: #b91c1c;
+}
+
+@media (max-width: 900px) {
+  .timeline {
+    grid-template-columns: 1fr;
+  }
+}
