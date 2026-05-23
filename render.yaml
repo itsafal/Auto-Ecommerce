@@ -11,7 +11,7 @@ services:
     startCommand: uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: USE_CLICKHOUSE
-        value: "false"
+        value: "true"
       - key: USE_AGENT_FIXTURES
         value: "true"
       - key: USE_TEMPORAL
@@ -70,5 +70,9 @@ services:
     envVars:
       - key: NEXT_PUBLIC_USE_MOCKS
         value: "false"
+      # Hard-coded backend URL. If the backend service is renamed, update here.
+      # Avoid `sync: false` here — without an explicit value the frontend
+      # silently boots into mock mode at build time (NEXT_PUBLIC_* is baked
+      # into the bundle), which is invisible until users notice fake data.
       - key: NEXT_PUBLIC_API_BASE_URL
-        sync: false
+        value: https://auto-ecommerce-backend.onrender.com

@@ -23,7 +23,9 @@ class Settings:
     auth_secret: str = "dev-auth-secret-change-me"
     auth_token_ttl_minutes: int = 60 * 24 * 7
     agent_stream_delay_ms: int = 0
-    require_auth_for_runs: bool = False
+    # Secure default: production should require auth. Local dev and tests
+    # explicitly disable via REQUIRE_AUTH_FOR_RUNS=false in their .env/conftest.
+    require_auth_for_runs: bool = True
     google_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
     nimble_api_key: str = ""
@@ -42,7 +44,7 @@ def get_settings() -> Settings:
         auth_secret=os.getenv("AUTH_SECRET", "dev-auth-secret-change-me"),
         auth_token_ttl_minutes=int(os.getenv("AUTH_TOKEN_TTL_MINUTES", str(60 * 24 * 7))),
         agent_stream_delay_ms=int(os.getenv("AGENT_STREAM_DELAY_MS", "0")),
-        require_auth_for_runs=_env_bool("REQUIRE_AUTH_FOR_RUNS", False),
+        require_auth_for_runs=_env_bool("REQUIRE_AUTH_FOR_RUNS", True),
         google_api_key=os.getenv("GOOGLE_API_KEY", ""),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         nimble_api_key=os.getenv("NIMBLE_API_KEY", ""),
