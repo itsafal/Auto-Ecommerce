@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import APIRouter, HTTPException
 
@@ -10,6 +10,7 @@ from backend.schemas import (
     LaunchRun,
     LaunchTriggerResponse,
     RunStatus,
+    StoreOutput,
     WorkflowInput,
 )
 from backend.settings import get_settings
@@ -17,6 +18,20 @@ from backend.store import run_store
 from backend.workflows.activities import execute_fixture_launch, slugify_product
 
 router = APIRouter(prefix="/api", tags=["runs"])
+
+
+def _fixture_store(slug: str, run_id: UUID | None = None) -> StoreOutput:
+    return StoreOutput(
+        store_id=run_id or uuid5(NAMESPACE_URL, f"auto-ecommerce-store:{slug}"),
+        slug=slug,
+        store_url=f"https://{slug}.fastaisolution.com",
+        product_name="MagSnap Pro",
+        description="A compact magnetic phone mount built for fast one-handed docking and a cleaner dashboard.",
+        price=29.99,
+        hero_image_url="/demo/magnetic-phone-mount.png",
+        supplier="Demo Supplier 4821",
+        cta_text="Buy Now - Ships in 3 days",
+    )
 
 
 async def _start_launch(request: LaunchRequest) -> LaunchTriggerResponse:
@@ -94,6 +109,18 @@ async def get_run_events(run_id: UUID) -> AgentEventsResponse:
 async def get_stores() -> dict[str, list[LaunchRun]]:
     runs = [run for run in run_store._runs.values() if run.store_url]
     return {"stores": runs}
+
+
+@router.get("/stores/{slug}", response_model=StoreOutput)
+async def get_store(slug: str) -> StoreOutput:
+    for run in run_store._runs.values():
+        if run.slug == slug and run.store_url:
+            return _fixture_store(slug=run.slug, run_id=run.run_id)
+
+    if slug == "magneticmount":
+        return _fixture_store(slug=slug)
+
+    raise HTTPException(status_code=404, detail="Store not found")
 
 
 @router.get("/agents/status")

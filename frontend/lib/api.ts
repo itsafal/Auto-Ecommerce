@@ -15,6 +15,18 @@ export type TriggerResponse = {
   temporal_workflow_id: string;
 };
 
+export type AuthUser = {
+  id: string;
+  email: string;
+  full_name: string;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  token_type: "bearer";
+  user: AuthUser;
+};
+
 const useMocks = () =>
   process.env.NEXT_PUBLIC_USE_MOCKS !== "false" ||
   !process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -73,6 +85,42 @@ export async function getStore(slug: string): Promise<StoreConfig> {
   const response = await fetch(`${apiBaseUrl()}/api/stores/${slug}`);
   if (!response.ok) {
     throw new Error("Failed to load store");
+  }
+  return response.json();
+}
+
+export async function signup(email: string, password: string, fullName: string): Promise<AuthResponse> {
+  const response = await fetch(`${apiBaseUrl()}/api/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, full_name: fullName })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? "Failed to create account");
+  }
+  return response.json();
+}
+
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const response = await fetch(`${apiBaseUrl()}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? "Failed to sign in");
+  }
+  return response.json();
+}
+
+export async function getCurrentUser(token: string): Promise<AuthUser> {
+  const response = await fetch(`${apiBaseUrl()}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    throw new Error("Session expired");
   }
   return response.json();
 }
