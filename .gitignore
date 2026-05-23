@@ -20,6 +20,7 @@ coverage/
 
 # Logs and local OS files
 *.log
+.dstore
 .DS_Store
 Thumbs.db
 
