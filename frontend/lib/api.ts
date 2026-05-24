@@ -15,6 +15,32 @@ export type TriggerResponse = {
   temporal_workflow_id: string;
 };
 
+export type BatchSlot = {
+  slot: number;
+  run_id: string;
+  product_name: string;
+};
+
+export type BatchTriggerResponse = {
+  batch_id: string;
+  target_count: number;
+  threshold: number;
+  slots: BatchSlot[];
+};
+
+export type BatchRun = LaunchRun & {
+  batch_id: string | null;
+  batch_slot: number | null;
+  attempt_index: number;
+};
+
+export type BatchStatusResponse = {
+  batch_id: string;
+  target_count: number;
+  threshold: number;
+  runs: BatchRun[];
+};
+
 export type AuthUser = {
   id: string;
   email: string;

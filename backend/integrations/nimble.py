@@ -45,10 +45,14 @@ def summarize_serp(parsed: dict[str, Any], query: str) -> dict[str, Any]:
     related = entities.get("RelatedSearch") or []
 
     prices: list[float] = []
+    thumbnails: list[str] = []
     for item in shopping:
         price = _coerce_price(item.get("price"))
         if price and 0 < price < 100000:
             prices.append(price)
+        thumb = item.get("thumbnail")
+        if isinstance(thumb, str) and thumb.startswith(("http://", "https://", "data:")):
+            thumbnails.append(thumb)
 
     top_organic = []
     for item in organic[:5]:
@@ -76,6 +80,11 @@ def summarize_serp(parsed: dict[str, Any], query: str) -> dict[str, Any]:
         "price_samples": prices[:6],
         "top_organic": top_organic,
         "related_queries": related_queries,
+        # Top 3 product photos from Google Shopping listings — surfaced so
+        # the storefront can render a real product image instead of the
+        # CSS device mockup. Empty list when Nimble returned no shopping
+        # entities with thumbnail URLs.
+        "shopping_thumbnails": thumbnails[:3],
     }
 
 

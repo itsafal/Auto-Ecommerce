@@ -1,10 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import DashboardPage from "../app/dashboard/page";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn() })
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/dashboard"
 }));
 
 async function renderDashboard() {
@@ -40,6 +40,7 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Buyer")).toBeInTheDocument();
     expect(screen.getByText("Legal / Risk")).toBeInTheDocument();
     expect(screen.getByText("Advertising")).toBeInTheDocument();
+    expect(screen.getByText("Score Launch")).toBeInTheDocument();
     expect(screen.getByText("Store Creator")).toBeInTheDocument();
   });
 

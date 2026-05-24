@@ -24,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.admin import router as admin_router
 from backend.api.auth import router as auth_router
+from backend.api.businesses import router as businesses_router
 from backend.api.runs import router as runs_router
 
 # Explicit defaults plus a regex for local alternate ports and deploy previews.
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(runs_router)
     app.include_router(admin_router)
+    app.include_router(businesses_router)
     return app
 
 

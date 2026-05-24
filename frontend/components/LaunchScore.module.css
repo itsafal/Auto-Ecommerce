@@ -1,45 +1,59 @@
+/* Reads dashboard tokens; falls back to light palette outside the dashboard. */
 .panel {
-  padding: 20px;
-  border: 1px solid #d7dde7;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 16px;
+  border: 1px solid var(--border, #d7dde7);
+  border-radius: 6px;
+  background: var(--surface, #ffffff);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   gap: 16px;
+  align-items: flex-start;
 }
 
 .header h2 {
   margin: 0;
-  font-size: 18px;
+  font: 11px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .header p {
-  margin: 8px 0 0;
-  color: #64748b;
+  margin: 4px 0 0;
+  color: var(--text-dim, #94a3b8);
+  font: 11px var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
 }
 
 .header strong {
-  color: #0f766e;
-  font-size: 34px;
+  color: var(--accent-2, #0f766e);
+  font: 700 32px/1 var(--mono, ui-monospace, monospace);
+  letter-spacing: -0.01em;
 }
 
 .rows {
   display: grid;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .row {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding-top: 10px;
-  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  font: 12px var(--mono, ui-monospace, monospace);
+  color: var(--text-muted, #475569);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
 }
 
 .row span:last-child {
-  font-weight: 800;
+  color: var(--text, #0f172a);
+  font-weight: 700;
 }

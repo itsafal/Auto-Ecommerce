@@ -1,4 +1,5 @@
-import type { StoreConfig } from "@/lib/mock-data";
+import type { CSSProperties } from "react";
+import type { StoreConfig, StoreTheme } from "@/lib/mock-data";
 import styles from "./StoreTemplate.module.css";
 
 function Stars({ rating }: { rating: number }) {
@@ -11,6 +12,27 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
+// Theme tokens are projected onto the `.shell` root as CSS custom properties.
+// Every color in StoreTemplate.module.css reads `var(--name, <default>)`, so
+// missing tokens silently fall through to the original teal palette.
+function themeStyle(theme?: StoreTheme | null): CSSProperties {
+  if (!theme) return {};
+  const vars: Record<string, string> = {};
+  if (theme.primary) vars["--accent"] = theme.primary;
+  if (theme.accent) vars["--accent-hover"] = theme.accent;
+  if (theme.bg) vars["--bg"] = theme.bg;
+  if (theme.surface) vars["--surface"] = theme.surface;
+  if (theme.text) vars["--text"] = theme.text;
+  if (theme.text_muted) vars["--text-muted"] = theme.text_muted;
+  if (theme.border) vars["--border"] = theme.border;
+  return vars as CSSProperties;
+}
+
+function isRealImageUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:");
+}
+
 export function StoreTemplate({ store }: { store: StoreConfig }) {
   const variants = store.variants ?? [];
   const features = store.features ?? [];
@@ -18,9 +40,15 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
   const faq = store.faq ?? [];
   const reviews = store.reviews ?? [];
   const domain = store.store_url.replace(/^https?:\/\//, "");
+  const accent = store.theme?.primary ?? "#0f766e";
+  const showRealHero = isRealImageUrl(store.hero_image_url);
 
   return (
-    <main className={styles.shell}>
+    <main
+      className={styles.shell}
+      style={themeStyle(store.theme)}
+      data-font-pair={store.theme?.font_pair ?? "sans-modern"}
+    >
       <nav className={styles.topbar}>
         <span className={styles.brand}>{store.product_name}</span>
         <span className={styles.domain}>{domain}</span>
@@ -44,10 +72,18 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
           <p className={styles.supplier}>Supplier: {store.supplier}</p>
         </div>
         <div className={styles.productVisual} aria-label={`${store.product_name} visual`}>
-          <div className={styles.device}>
-            <div className={styles.mount} />
-            <div className={styles.phone} />
-          </div>
+          {showRealHero ? (
+            <img
+              className={styles.heroImage}
+              src={store.hero_image_url}
+              alt={store.product_name}
+            />
+          ) : (
+            <div className={styles.device}>
+              <div className={styles.mount} />
+              <div className={styles.phone} />
+            </div>
+          )}
         </div>
       </section>
 
@@ -70,10 +106,10 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
               <article
                 className={styles.variantCard}
                 key={v.name}
-                style={{ borderTopColor: v.accent || "#0f766e" }}
+                style={{ borderTopColor: v.accent || accent }}
               >
                 {v.badge && (
-                  <span className={styles.variantBadge} style={{ background: v.accent || "#0f766e" }}>
+                  <span className={styles.variantBadge} style={{ background: v.accent || accent }}>
                     {v.badge}
                   </span>
                 )}
@@ -81,7 +117,7 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
                 <p className={styles.variantBlurb}>{v.blurb}</p>
                 <div className={styles.variantFoot}>
                   <span className={styles.variantPrice}>${v.price.toFixed(2)}</span>
-                  <a href="#checkout" className={styles.variantCta} style={{ background: v.accent || "#0f766e" }}>
+                  <a href="#checkout" className={styles.variantCta} style={{ background: v.accent || accent }}>
                     Add to cart
                   </a>
                 </div>

@@ -1,11 +1,13 @@
+/* Aligned to the dashboard's terminal tokens; safe defaults when rendered
+   outside the dashboard shell. */
 .card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .header {
@@ -16,17 +18,17 @@
 }
 
 .title {
-  font-size: 0.78rem;
-  font-weight: 600;
+  font: 11px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
 }
 
 .winner {
-  font-size: 0.78rem;
-  color: rgba(120, 200, 160, 0.9);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font: 11px var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.02em;
+  color: var(--accent, rgba(120, 200, 160, 0.9));
 }
 
 .row {
@@ -35,14 +37,34 @@
   align-items: stretch;
 }
 
+.field {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.label {
+  font: 10px var(--mono, ui-monospace, monospace);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim, rgba(255, 255, 255, 0.4));
+  margin-bottom: 4px;
+}
+
 .select {
   flex: 1;
-  background: rgba(15, 15, 18, 0.7);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 0.85rem;
+  background: var(--surface-2, rgba(15, 15, 18, 0.7));
+  color: var(--text, white);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 4px;
+  padding: 7px 10px;
+  font: 12px var(--mono, ui-monospace, monospace);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--accent, #5fd3a3);
 }
 
 .select:disabled {
@@ -50,28 +72,17 @@
   cursor: not-allowed;
 }
 
-.label {
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 4px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
 .status {
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.5);
+  font: 11px var(--mono, ui-monospace, monospace);
+  color: var(--text-dim, rgba(255, 255, 255, 0.5));
   min-height: 1em;
+  letter-spacing: 0.02em;
 }
 
 .error {
-  color: rgba(255, 130, 130, 0.9);
+  color: var(--danger, rgba(255, 130, 130, 0.9));
 }
 
 .success {
-  color: rgba(120, 200, 160, 0.9);
+  color: var(--accent, rgba(120, 200, 160, 0.9));
 }

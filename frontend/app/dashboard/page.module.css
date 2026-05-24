@@ -1,57 +1,157 @@
+/* Terminal/control-room aesthetic. All tokens declared on .shell so nested
+   component CSS (AgentTimeline, AgentFeed, LaunchScore, ModelPicker) can
+   read them via var(); auth pages stay light because they don't mount .shell. */
 .shell {
-  max-width: 1180px;
+  --bg: #0b0f14;
+  --surface: #11161d;
+  --surface-2: #161c25;
+  --surface-3: #1d2532;
+  --border: #1e2530;
+  --border-strong: #2a3445;
+  --text: #e6edf3;
+  --text-muted: #8b97a8;
+  --text-dim: #5d6a7c;
+  --accent: #5fd3a3;
+  --accent-2: #e5a657;
+  --accent-3: #6aa7ff;
+  --danger: #ef6f6c;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  min-height: 100vh;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding: 24px 28px 64px;
+  background: var(--bg);
+  color: var(--text);
+  font-feature-settings: "ss01", "cv11";
 }
+
+/* Pulls the body background dark too, without leaking into auth pages. */
+.shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--bg);
+}
+
+/* ---------- Header ---------- */
 
 .header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 24px;
-  align-items: flex-start;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
 }
 
+.brandLockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: pulseDot 2s infinite;
+}
+
+@keyframes pulseDot {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  70% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+.statusText {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.storeLink {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.storeLink:hover {
+  text-decoration: underline;
+}
+
+.storeLink[data-pending="true"] {
+  color: var(--text-dim);
+}
+
+/* (Legacy h1 / eyebrow kept for the loading state.) */
 .eyebrow {
   margin: 0 0 8px;
-  color: #0f766e;
-  font-weight: 800;
+  color: var(--accent);
+  font-weight: 700;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
 }
 
 .header h1 {
   margin: 0;
-  font-size: 42px;
+  font-size: 22px;
+  font-family: var(--mono);
+  letter-spacing: -0.01em;
 }
 
-.storeLink {
-  color: #0f766e;
-  font-weight: 800;
-}
+/* ---------- Control panels ---------- */
 
 .controlPanel {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) auto;
-  gap: 16px;
+  gap: 14px;
   align-items: end;
-  margin-top: 28px;
-  padding: 20px;
-  border: 1px solid #d7dde7;
-  border-radius: 8px;
-  background: #ffffff;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
 }
 
 .controlPanel label {
   display: grid;
   gap: 8px;
-  color: #334155;
-  font-weight: 800;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
 }
 
 .controlPanel input {
   width: 100%;
-  min-height: 46px;
+  min-height: 40px;
   padding: 0 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 14px var(--mono);
+}
+
+.controlPanel input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .trendHeader {
@@ -62,27 +162,30 @@
 }
 
 .trendLabel {
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .trendRefresh {
-  padding: 4px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #0f766e;
-  font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--accent);
+  font: 11px/1 var(--mono);
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
 .trendRefresh:hover:not(:disabled) {
-  border-color: #0f766e;
-  background: #ecfdf5;
+  border-color: var(--accent);
+  background: var(--surface-3);
 }
 
 .trendRefresh:disabled {
@@ -93,134 +196,201 @@
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
 }
 
 .chip {
-  padding: 6px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 600;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font: 12px var(--mono);
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.12s ease;
 }
 
 .chip:hover:not(:disabled) {
-  border-color: #0f766e;
-  color: #0f766e;
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--surface-3);
 }
 
 .chip[data-active="true"] {
-  background: #0f766e;
-  border-color: #0f766e;
-  color: #ffffff;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.chip[data-active="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  color: var(--accent);
 }
 
 .chip:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .controlPanel button {
-  min-height: 46px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 8px;
-  background: #0f766e;
-  color: #ffffff;
-  font-weight: 800;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--accent);
+  font: 12px var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.controlPanel button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
 }
 
 .controlPanel button:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: wait;
 }
 
 .error {
-  color: #b91c1c;
-  font-weight: 800;
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--danger);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
 }
+
+/* ---------- Run strip (5 readouts) ---------- */
 
 .runStrip {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  gap: 12px;
-  margin-top: 18px;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  gap: 1px;
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--border);
 }
 
-.runStrip div {
+.runStrip > div {
   min-width: 0;
-  padding: 16px;
-  border: 1px solid #d7dde7;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 12px 16px;
+  background: var(--surface);
 }
 
 .runStrip span {
   display: block;
-  color: #64748b;
-  font-size: 13px;
+  color: var(--text-muted);
+  font: 10px var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .runStrip strong {
   display: block;
+  margin-top: 6px;
+  color: var(--text);
+  font: 14px var(--mono);
+  font-weight: 600;
   overflow-wrap: anywhere;
-  margin-top: 8px;
 }
+
+.runStrip strong[data-state="ok"] {
+  color: var(--accent);
+}
+
+.runStrip strong[data-state="warn"] {
+  color: var(--accent-2);
+}
+
+.runStrip strong[data-state="muted"] {
+  color: var(--text-dim);
+}
+
+/* ---------- Main grid ---------- */
 
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 18px;
-  margin-top: 18px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
+  margin-top: 14px;
 }
 
 .primary {
   display: grid;
-  gap: 18px;
+  gap: 14px;
+  min-width: 0;
 }
 
 .secondary {
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 14px;
 }
 
 .finalUrl {
-  padding: 20px;
-  border: 1px solid #d7dde7;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
 }
 
 .finalUrl h2 {
-  margin: 0 0 12px;
-  font-size: 18px;
+  margin: 0 0 10px;
+  font: 11px var(--mono);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .finalUrl a {
-  color: #0f766e;
-  font-weight: 800;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
+.finalUrl p {
+  margin: 0;
+  color: var(--text-dim);
+  font: 13px var(--mono);
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 1000px) {
+  .runStrip {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @media (max-width: 900px) {
-  .header,
   .controlPanel {
     grid-template-columns: 1fr;
   }
 
-  .header {
-    display: grid;
-  }
-
-  .runStrip,
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }

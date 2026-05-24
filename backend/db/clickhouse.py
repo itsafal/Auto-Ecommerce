@@ -81,17 +81,49 @@ class ClickHouseClient:
             if stmt:
                 self._client.command(stmt)
 
-    def write_run(self, run_id, product_name, slug, status="started", temporal_workflow_id=""):
+    def write_run(
+        self,
+        run_id,
+        product_name,
+        slug,
+        status="started",
+        temporal_workflow_id="",
+        batch_id=None,
+        batch_slot=None,
+        attempt_index=1,
+    ):
         rid = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
+        bid = uuid.UUID(batch_id) if isinstance(batch_id, str) and batch_id else batch_id
         self._client.insert(
             "launch_runs",
-            [[rid, temporal_workflow_id, product_name, slug, status, 0.0, "", ""]],
+            [[rid, temporal_workflow_id, product_name, slug, status, 0.0, "", "",
+              bid, batch_slot, int(attempt_index or 1)]],
             column_names=[
                 "run_id", "temporal_workflow_id", "product_name", "slug",
                 "status", "launch_score", "decision", "store_url",
+                "batch_id", "batch_slot", "attempt_index",
             ],
         )
         return self.get_run(run_id)
+
+    def list_runs_by_batch(self, batch_id):
+        bid = str(batch_id)
+        return list(
+            self._client.query(
+                "SELECT * FROM launch_runs WHERE batch_id = %(bid)s ORDER BY batch_slot, attempt_index",
+                parameters={"bid": bid},
+            ).named_results()
+        )
+
+    def recently_tried_products(self, window_days: int) -> set[str]:
+        """Distinct lowercased product_name values researched in the last
+        `window_days` days. Used to seed the batch dedup exclusion set."""
+        rows = self._client.query(
+            "SELECT DISTINCT lower(trim(product_name)) AS name FROM trend_signals "
+            "WHERE detected_at > now() - INTERVAL %(d)s DAY",
+            parameters={"d": int(window_days)},
+        ).result_set
+        return {str(r[0]) for r in rows if r and r[0]}
 
     def update_run(self, run_id, **fields):
         # ClickHouse doesn't love updates; use ALTER ... UPDATE (mutation) for demo.

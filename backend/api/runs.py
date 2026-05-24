@@ -8,11 +8,17 @@ from fastapi import APIRouter, Header, HTTPException
 from backend.api.auth import get_authenticated_user
 from backend.schemas import (
     AgentEventsResponse,
+    BatchSlotSummary,
+    BatchStatusResponse,
+    BatchTriggerRequest,
+    BatchTriggerResponse,
+    Decision,
     LaunchRequest,
     LaunchRun,
     LaunchTriggerResponse,
     RunStatus,
     StoreOutput,
+    StoreTheme,
     WorkflowInput,
     WorkflowResult,
 )
@@ -20,6 +26,7 @@ from backend.settings import get_settings
 from backend.store import run_store
 from backend.workflows.activities import (
     build_store_url,
+    discover_new_trending_products,
     discover_trending_products,
     execute_fixture_launch,
     execute_streaming_launch,
@@ -231,7 +238,91 @@ async def get_store(slug: str) -> StoreOutput:
     if get_settings().demo_mode and slug == "magneticmount":
         return _fixture_store(slug=slug)
 
+    # Fallback: a batch run completed and produced a store URL but the rich
+    # StoreOutput wasn't persisted (e.g. older runs from before
+    # batch-slot stores were saved). Synthesize a minimal but valid storefront
+    # from the LaunchRun + the fixture profile so the URL still renders
+    # something useful instead of a 404.
+    for run in run_store.list_runs_with_stores():
+        if run.slug == slug:
+            return _store_from_run(run)
+
     raise HTTPException(status_code=404, detail="Store not found")
+
+
+_PALETTE_POOL: list[dict[str, str]] = [
+    # 10 curated, contrast-safe palettes. Each picked deterministically by
+    # hash(slug) so the same product always gets the same colors.
+    {"primary": "#0f766e", "accent": "#0d5d56", "bg": "#f5fbf9",
+     "surface": "#ffffff", "text": "#0f172a", "text_muted": "#475569",
+     "border": "#dbe9e5", "font_pair": "sans-modern"},                 # teal
+    {"primary": "#c2410c", "accent": "#9a3412", "bg": "#fff7ed",
+     "surface": "#ffffff", "text": "#1c1917", "text_muted": "#57534e",
+     "border": "#f5e6d3", "font_pair": "serif-elegant"},               # warm terracotta
+    {"primary": "#1d4ed8", "accent": "#1e40af", "bg": "#eef2ff",
+     "surface": "#ffffff", "text": "#0f172a", "text_muted": "#475569",
+     "border": "#dbe4ff", "font_pair": "sans-modern"},                 # cool blue
+    {"primary": "#7c3aed", "accent": "#6d28d9", "bg": "#faf5ff",
+     "surface": "#ffffff", "text": "#1e1b3a", "text_muted": "#4c3a72",
+     "border": "#e9d5ff", "font_pair": "sans-modern"},                 # violet
+    {"primary": "#be123c", "accent": "#9f1239", "bg": "#fff1f2",
+     "surface": "#ffffff", "text": "#1f0a13", "text_muted": "#6b1f33",
+     "border": "#fecdd3", "font_pair": "serif-elegant"},               # rose
+    {"primary": "#0e7490", "accent": "#155e75", "bg": "#ecfeff",
+     "surface": "#ffffff", "text": "#0a1f25", "text_muted": "#475569",
+     "border": "#cffafe", "font_pair": "mono-tech"},                   # cyan-tech
+    {"primary": "#15803d", "accent": "#166534", "bg": "#f0fdf4",
+     "surface": "#ffffff", "text": "#14271a", "text_muted": "#3f6f4d",
+     "border": "#bbf7d0", "font_pair": "serif-elegant"},               # forest
+    {"primary": "#a16207", "accent": "#854d0e", "bg": "#fefce8",
+     "surface": "#ffffff", "text": "#1c1303", "text_muted": "#6b5410",
+     "border": "#fef08a", "font_pair": "serif-elegant"},               # mustard
+    {"primary": "#db2777", "accent": "#be185d", "bg": "#fdf2f8",
+     "surface": "#ffffff", "text": "#1f071a", "text_muted": "#6b2150",
+     "border": "#fbcfe8", "font_pair": "sans-modern"},                 # magenta
+    {"primary": "#475569", "accent": "#334155", "bg": "#f8fafc",
+     "surface": "#ffffff", "text": "#0f172a", "text_muted": "#475569",
+     "border": "#e2e8f0", "font_pair": "mono-tech"},                   # slate
+]
+
+
+def _theme_for_slug(slug: str) -> StoreTheme:
+    """Deterministic palette pick keyed on the slug — same product always
+    renders with the same colors across requests, even when the real
+    StoreTheme wasn't persisted."""
+    import hashlib
+
+    digest = hashlib.sha256(slug.encode("utf-8")).hexdigest()
+    idx = int(digest[:8], 16) % len(_PALETTE_POOL)
+    p = _PALETTE_POOL[idx]
+    return StoreTheme(**p)
+
+
+def _store_from_run(run: LaunchRun) -> StoreOutput:
+    """Build a minimal StoreOutput for a LaunchRun whose pipeline finished but
+    whose StoreOutput wasn't persisted to run_store._stores."""
+    from backend.workflows.activities import _product_profile
+
+    profile = _product_profile(run.product_name)
+    slug = run.slug
+    title = run.product_name
+    return StoreOutput(
+        store_id=uuid5(NAMESPACE_URL, f"auto-ecommerce-store:{slug}"),
+        slug=slug,
+        store_url=run.store_url or build_store_url(slug),
+        product_name=profile.get("brand", title),
+        tagline=profile.get("tagline", f"A focused way to buy {title}."),
+        description=profile.get(
+            "description",
+            f"A clean, single-product storefront for {title}.",
+        ),
+        price=round(profile.get("low", 29.0) * 1.2, 2),
+        hero_image_url=profile.get("hero", "/demo/magnetic-phone-mount.png"),
+        supplier="Demo Supplier",
+        cta_text="Buy Now",
+        shipping_note=f"Ships in {profile.get('shipping_days', 7)} days",
+        theme=_theme_for_slug(slug),
+    )
 
 
 @router.get("/agents/status")
@@ -242,3 +333,248 @@ async def get_agents_status() -> dict[str, str]:
 @router.get("/agents/trending-products")
 async def get_trending_products(limit: int = 8) -> dict:
     return await discover_trending_products(limit=max(1, min(limit, 20)))
+
+
+# ---------------------------------------------------------------------------
+# Batch deployment — launch N stores in parallel; each slot retries against
+# a different product if its launch_score falls below the threshold.
+# ---------------------------------------------------------------------------
+
+
+async def _build_candidate_queue(count: int, products: list[str] | None) -> asyncio.Queue[str]:
+    """Build the FIFO of product names every slot draws from on retry.
+
+    If the caller supplied `products` explicitly (curl / tests), use exactly
+    that list — no dedup. Otherwise, ask `discover_new_trending_products` for
+    a pool that excludes anything we've researched in the last DEDUP_WINDOW_DAYS
+    days. This is what makes the autonomous batch deploy never re-try a product
+    it has already attempted.
+    """
+    settings = get_settings()
+    queue: asyncio.Queue[str] = asyncio.Queue()
+
+    if products:
+        for p in products:
+            await queue.put(p)
+        return queue
+
+    pool_size = max(count * (settings.batch_max_attempts_per_slot + 1), count * 3)
+    # Pull the "already tried recently" set from the run_store, which prefers
+    # ClickHouse and falls back to the in-memory mirror when CH is off.
+    excluded: set[str] = set()
+    if settings.dedup_window_days > 0:
+        try:
+            excluded = run_store.recently_tried_products(settings.dedup_window_days)
+        except Exception:
+            excluded = set()
+
+    fresh = await discover_new_trending_products(
+        limit=min(pool_size, 20),
+        exclude=excluded,
+    )
+    for name in fresh:
+        await queue.put(name)
+
+    return queue
+
+
+async def _run_batch_slot(
+    *,
+    batch_id: UUID,
+    slot_index: int,
+    initial_run_id: UUID,
+    initial_product: str,
+    candidate_queue: asyncio.Queue[str],
+    threshold: float,
+    max_attempts: int,
+    require_auth: bool,
+) -> None:
+    """Run one batch slot to completion.
+
+    Each attempt runs the streaming pipeline so the dashboard sees live events
+    per slot. If the launch_score clears the threshold and risk is cleared the
+    slot is approved; otherwise it pops the next candidate from the queue and
+    retries, up to `max_attempts` attempts. When attempts are exhausted the
+    slot's final run is marked failed with decision=reject.
+    """
+    current_run_id = initial_run_id
+    current_product = initial_product
+
+    for attempt in range(1, max_attempts + 1):
+        run = LaunchRun(
+            run_id=current_run_id,
+            temporal_workflow_id=f"launch-store-{current_run_id}",
+            product_name=current_product,
+            slug=slugify_product(current_product),
+            status=RunStatus.started,
+            batch_id=batch_id,
+            batch_slot=slot_index,
+            attempt_index=attempt,
+        )
+        run_store.upsert_run(run)
+
+        workflow_input = WorkflowInput(
+            run_id=current_run_id,
+            product_name=current_product,
+            temporal_workflow_id=f"launch-store-{current_run_id}",
+        )
+
+        try:
+            delay_ms = get_settings().agent_stream_delay_ms
+            if delay_ms > 0:
+                await execute_streaming_launch(
+                    workflow_input,
+                    delay_ms=delay_ms,
+                    on_event=lambda ev, _rid=current_run_id: run_store.add_event(_rid, ev),
+                    on_progress=lambda r, _bid=batch_id, _slot=slot_index, _att=attempt: run_store.upsert_run(
+                        _enrich_run_with_batch(r, _bid, _slot, _att)
+                    ),
+                    # Persist the generated StoreOutput so GET /api/stores/{slug}
+                    # serves it when the operator clicks the subdomain URL.
+                    on_store=lambda store: run_store.upsert_store(store),
+                )
+            else:
+                result = await execute_fixture_launch(workflow_input)
+                enriched = _enrich_run_with_batch(result.run, batch_id, slot_index, attempt)
+                run_store.upsert_run(enriched)
+                run_store.set_events(current_run_id, result.events)
+                if result.store is not None:
+                    run_store.upsert_store(result.store)
+        except Exception as exc:
+            current_run = run_store.get_run(current_run_id)
+            if current_run is not None:
+                current_run.status = RunStatus.failed
+                current_run.error = str(exc)
+                current_run.attempt_index = attempt
+                run_store.upsert_run(current_run)
+            return
+
+        final_run = run_store.get_run(current_run_id)
+        if final_run is None:
+            return
+
+        # Force the batch fields back on (the workflow result loses them when
+        # build_launch_result rebuilds the LaunchRun model).
+        final_run.batch_id = batch_id
+        final_run.batch_slot = slot_index
+        final_run.attempt_index = attempt
+        run_store.upsert_run(final_run)
+
+        passed = (
+            final_run.launch_score is not None
+            and final_run.launch_score >= threshold
+            and final_run.decision == Decision.launch
+        )
+
+        if passed:
+            # Promote this run to a live business so it appears in the
+            # /businesses portfolio and the lifecycle counters.
+            from datetime import datetime, timezone
+
+            final_run.business_status = "live"
+            final_run.launched_at = datetime.now(timezone.utc)
+            run_store.upsert_run(final_run)
+            return
+
+        # Score below threshold — reject this attempt, pull the next product.
+        final_run.decision = Decision.reject
+        run_store.upsert_run(final_run)
+
+        if attempt >= max_attempts:
+            return
+
+        # Pull the next candidate; if the queue is empty we exhaust the slot.
+        try:
+            current_product = candidate_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return
+        current_run_id = uuid4()
+
+
+def _enrich_run_with_batch(
+    run: LaunchRun, batch_id: UUID, slot_index: int, attempt: int
+) -> LaunchRun:
+    """Stamp batch metadata onto a LaunchRun returned from the workflow."""
+    run.batch_id = batch_id
+    run.batch_slot = slot_index
+    run.attempt_index = attempt
+    return run
+
+
+@router.post("/batch/launch", response_model=BatchTriggerResponse)
+async def trigger_batch(
+    request: BatchTriggerRequest | None = None,
+    authorization: str | None = Header(default=None),
+) -> BatchTriggerResponse:
+    """Kick off a batch of N stores; returns immediately with the batch_id.
+
+    Each slot runs its own pipeline in the background. Poll
+    `GET /api/batch/{batch_id}` to see progress.
+    """
+    settings = get_settings()
+    if settings.require_auth_for_runs:
+        get_authenticated_user(authorization)
+
+    req = request or BatchTriggerRequest()
+    count = req.count
+    threshold = req.threshold if req.threshold is not None else settings.launch_score_threshold
+
+    candidate_queue = await _build_candidate_queue(count, req.products)
+
+    # Seed each slot with its first product (popping from the candidate queue);
+    # if the queue runs out before we fill all slots, fall back to a placeholder.
+    seeded_products: list[str] = []
+    for _ in range(count):
+        try:
+            seeded_products.append(candidate_queue.get_nowait())
+        except asyncio.QueueEmpty:
+            seeded_products.append("Magnetic Phone Mount")
+
+    batch_id = uuid4()
+    slots: list[BatchSlotSummary] = []
+    for slot_index, product in enumerate(seeded_products):
+        run_id = uuid4()
+        slots.append(
+            BatchSlotSummary(slot=slot_index, run_id=run_id, product_name=product)
+        )
+        asyncio.create_task(
+            _run_batch_slot(
+                batch_id=batch_id,
+                slot_index=slot_index,
+                initial_run_id=run_id,
+                initial_product=product,
+                candidate_queue=candidate_queue,
+                threshold=threshold,
+                max_attempts=settings.batch_max_attempts_per_slot,
+                require_auth=settings.require_auth_for_runs,
+            )
+        )
+
+    return BatchTriggerResponse(
+        batch_id=batch_id,
+        target_count=count,
+        threshold=threshold,
+        slots=slots,
+    )
+
+
+@router.get("/batch/{batch_id}", response_model=BatchStatusResponse)
+async def get_batch(batch_id: UUID) -> BatchStatusResponse:
+    runs = run_store.list_runs_by_batch(batch_id)
+    # Reuse the operator-configured threshold for the read-side view; if a
+    # batch was launched with a non-default threshold the launch response is
+    # the source of truth for that specific batch — we expose the current
+    # default here so the dashboard has something to render.
+    settings = get_settings()
+    # Approximate target_count as the highest batch_slot index + 1 in the
+    # results; safer than guessing if a slot is still spinning up.
+    if runs:
+        target = max((r.batch_slot or 0) for r in runs) + 1
+    else:
+        target = settings.batch_target_count
+    return BatchStatusResponse(
+        batch_id=batch_id,
+        target_count=target,
+        threshold=settings.launch_score_threshold,
+        runs=runs,
+    )

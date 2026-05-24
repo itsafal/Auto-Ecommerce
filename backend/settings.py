@@ -38,6 +38,16 @@ class Settings:
     # "auto" = try providers in order (portkey, anthropic, gemini) based on which
     # keys are set. Override with "anthropic" | "portkey" | "gemini" to force one.
     llm_provider: str = "auto"
+    # Batch deployment defaults — operator can override per request.
+    launch_score_threshold: float = 0.65
+    batch_target_count: int = 5
+    batch_max_attempts_per_slot: int = 5
+    # Dedup window: never re-attempt a product researched in the last N days.
+    # Set to 0 to disable dedup (e.g. for testing or demos that re-use products).
+    dedup_window_days: int = 7
+    # Max concurrently live stores. Surfaced in the UI now; enforced when the
+    # autonomous lifecycle loop ships (Phase E foundation only in this PR).
+    max_concurrent_live: int = 5
     nimble_api_key: str = ""
     nimble_api_url: str = ""
 
@@ -63,6 +73,11 @@ def get_settings() -> Settings:
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         llm_provider=(os.getenv("LLM_PROVIDER", "auto") or "auto").strip().lower(),
+        launch_score_threshold=float(os.getenv("LAUNCH_SCORE_THRESHOLD", "0.65")),
+        batch_target_count=int(os.getenv("BATCH_TARGET_COUNT", "5")),
+        batch_max_attempts_per_slot=int(os.getenv("BATCH_MAX_ATTEMPTS_PER_SLOT", "5")),
+        dedup_window_days=int(os.getenv("DEDUP_WINDOW_DAYS", "7")),
+        max_concurrent_live=int(os.getenv("MAX_CONCURRENT_LIVE", "5")),
         nimble_api_key=os.getenv("NIMBLE_API_KEY", ""),
         nimble_api_url=os.getenv("NIMBLE_API_URL", ""),
     )

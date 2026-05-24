@@ -77,6 +77,37 @@ class InMemoryRunStore:
             return self._fetch_run_from_clickhouse(run_id)
         return None
 
+    def list_runs_by_batch(self, batch_id: UUID) -> list[LaunchRun]:
+        """All runs (attempts) for a batch. Falls back to ClickHouse if local
+        memory doesn't have them yet (e.g. queried from a different process)."""
+        batch_id_str = str(batch_id)
+        local = [
+            run
+            for run in self._runs.values()
+            if run.batch_id and str(run.batch_id) == batch_id_str
+        ]
+        if local or not use_clickhouse():
+            local.sort(key=lambda r: (r.batch_slot or 0, r.attempt_index))
+            return local
+        try:
+            client = get_client()
+            if not hasattr(client, "list_runs_by_batch"):
+                return []
+            rows = client.list_runs_by_batch(batch_id_str)
+        except Exception as exc:
+            logger.error(
+                "[run_store] list_runs_by_batch CH fetch failed: %s", exc, exc_info=True
+            )
+            return []
+        parsed: list[LaunchRun] = []
+        for row in rows:
+            try:
+                parsed.append(_row_to_launch_run(row))
+            except Exception as exc:
+                logger.warning("[run_store] could not parse CH batch row: %s", exc)
+        parsed.sort(key=lambda r: (r.batch_slot or 0, r.attempt_index))
+        return parsed
+
     def list_runs_with_stores(self) -> list[LaunchRun]:
         local = [run for run in self._runs.values() if run.store_url]
         if not use_clickhouse():
@@ -165,6 +196,35 @@ class InMemoryRunStore:
                 exc_info=True,
             )
 
+    def recently_tried_products(self, window_days: int) -> set[str]:
+        """Set of distinct lowercased product names researched in the last
+        `window_days` days. Drives batch-slot dedup so the autonomous
+        candidate queue never re-attempts a product the system has already
+        scored recently.
+
+        Uses ClickHouse when enabled (cross-process truth) and falls back to
+        the in-memory mirror otherwise.
+        """
+        if use_clickhouse():
+            try:
+                client = get_client()
+                if hasattr(client, "recently_tried_products"):
+                    return client.recently_tried_products(window_days)
+            except Exception as exc:
+                logger.warning(
+                    "[run_store] CH recently_tried_products failed; using local: %s", exc
+                )
+        # Walk the memory mirror (matches MemoryStore shape).
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=int(window_days))
+        # _trend_signals lives inside the underlying MemoryStore when
+        # use_clickhouse=false; access via get_client()'s method when present.
+        client = get_client()
+        if hasattr(client, "recently_tried_products"):
+            return client.recently_tried_products(window_days)
+        return set()
+
     def record_trend_signal(self, signal: dict[str, Any]) -> None:
         """Append a row to trend_signals (analytics time-series of researched products).
 
@@ -199,14 +259,25 @@ class InMemoryRunStore:
                     slug=run.slug,
                     status=_enum_value(run.status),
                     temporal_workflow_id=run.temporal_workflow_id or "",
+                    batch_id=str(run.batch_id) if run.batch_id else None,
+                    batch_slot=run.batch_slot,
+                    attempt_index=run.attempt_index,
                 )
-            client.update_run(
-                str(run.run_id),
-                status=_enum_value(run.status),
-                launch_score=float(run.launch_score or 0.0),
-                decision=_enum_value(run.decision) if run.decision else "",
-                store_url=run.store_url or "",
-            )
+            update_fields: dict[str, Any] = {
+                "status": _enum_value(run.status),
+                "launch_score": float(run.launch_score or 0.0),
+                "decision": _enum_value(run.decision) if run.decision else "",
+                "store_url": run.store_url or "",
+                "business_status": run.business_status or "",
+                "shutdown_reason": run.shutdown_reason or "",
+            }
+            # ClickHouse's ALTER UPDATE doesn't love None for Nullable columns
+            # via the SDK's parameter dict — only include timestamps when set.
+            if run.launched_at is not None:
+                update_fields["launched_at"] = run.launched_at
+            if run.shutdown_at is not None:
+                update_fields["shutdown_at"] = run.shutdown_at
+            client.update_run(str(run.run_id), **update_fields)
         except Exception as exc:
             # Loud — these were silently dropping data before.
             logger.error(
@@ -295,6 +366,13 @@ def _row_to_launch_run(row: dict[str, Any]) -> LaunchRun:
         decision=_safe_decision(decision_raw) if decision_raw else None,
         store_url=row.get("store_url") or None,
         error=row.get("error") or None,
+        batch_id=row.get("batch_id") or None,
+        batch_slot=row.get("batch_slot") if row.get("batch_slot") is not None else None,
+        attempt_index=int(row.get("attempt_index") or 1),
+        business_status=row.get("business_status") or "",
+        launched_at=row.get("launched_at"),
+        shutdown_at=row.get("shutdown_at"),
+        shutdown_reason=row.get("shutdown_reason") or "",
     )
 
 
