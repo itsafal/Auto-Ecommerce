@@ -124,6 +124,22 @@ def test_cors_allows_local_dashboard_preflight() -> None:
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
 
+def test_cors_allows_alternate_local_dev_port() -> None:
+    client = TestClient(app)
+
+    response = client.options(
+        "/api/auth/signup",
+        headers={
+            "Origin": "http://127.0.0.1:3010",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3010"
+
+
 def test_trigger_requires_auth_when_enabled(monkeypatch) -> None:
     monkeypatch.setenv("USE_TEMPORAL", "false")
     monkeypatch.setenv("REQUIRE_AUTH_FOR_RUNS", "true")

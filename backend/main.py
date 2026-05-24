@@ -26,8 +26,7 @@ from backend.api.admin import router as admin_router
 from backend.api.auth import router as auth_router
 from backend.api.runs import router as runs_router
 
-# Localhost-only for now. When we deploy fastaisolution.com, uncomment the
-# entries below (and the regex) to allow prod + wildcard subdomain origins.
+# Explicit defaults plus a regex for local alternate ports and deploy previews.
 DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -35,12 +34,12 @@ DEFAULT_ALLOWED_ORIGINS = [
     # "https://www.fastaisolution.com",
 ]
 
-# Matches https://<anything>.fastaisolution.com and onrender preview URLs.
-# DEFAULT_ALLOWED_ORIGIN_REGEX = (
-#     r"^https://([a-z0-9-]+\.)*fastaisolution\.com$"
-#     r"|^https://[a-z0-9-]+\.onrender\.com$"
-# )
-DEFAULT_ALLOWED_ORIGIN_REGEX = None
+# Matches local dev ports, https://<anything>.fastaisolution.com, and Render URLs.
+DEFAULT_ALLOWED_ORIGIN_REGEX = (
+    r"^http://(localhost|127\.0\.0\.1):\d+$"
+    r"|^https://([a-z0-9-]+\.)*fastaisolution\.com$"
+    r"|^https://[a-z0-9-]+\.onrender\.com$"
+)
 
 
 def create_app() -> FastAPI:
