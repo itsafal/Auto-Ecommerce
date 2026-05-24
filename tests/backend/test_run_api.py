@@ -190,9 +190,14 @@ def test_temporal_result_persistence_updates_run_and_events(monkeypatch) -> None
 
     run = client.get(f"/api/runs/{run_id}").json()
     events = client.get(f"/api/runs/{run_id}/events").json()["events"]
+    store_response = client.get("/api/stores/portablepowerstation")
+    store = store_response.json()
     assert run["status"] == "fallback_completed"
     assert run["store_url"] == "https://portablepowerstation.fastaisolution.com"
     assert len(events) == 6
+    assert store_response.status_code == 200
+    assert store["slug"] == "portablepowerstation"
+    assert store["store_url"] == "https://portablepowerstation.fastaisolution.com"
 
 
 def test_temporal_result_persistence_accepts_serialized_workflow_result(monkeypatch) -> None:
@@ -216,9 +221,14 @@ def test_temporal_result_persistence_accepts_serialized_workflow_result(monkeypa
 
     run = client.get(f"/api/runs/{run_id}").json()
     events = client.get(f"/api/runs/{run_id}/events").json()["events"]
+    store_response = client.get("/api/stores/portablepowerstation")
+    store = store_response.json()
     assert run["status"] == "fallback_completed"
     assert run["store_url"] == "https://portablepowerstation.fastaisolution.com"
     assert len(events) == 6
+    assert store_response.status_code == 200
+    assert store["slug"] == "portablepowerstation"
+    assert store["store_url"] == "https://portablepowerstation.fastaisolution.com"
 
 
 def test_streaming_launch_emits_running_then_completed_per_agent() -> None:

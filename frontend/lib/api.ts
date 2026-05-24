@@ -156,7 +156,20 @@ export type LLMConfig = {
   keys_set: { anthropic: boolean; portkey: boolean; gemini: boolean };
 };
 
+const mockLLMConfig: LLMConfig = {
+  provider: "auto",
+  auto_chain_winner: "fixture",
+  anthropic_model: "claude-haiku-4-5",
+  gemini_model: "gemini-2.5-flash-lite",
+  portkey_model: "@vertexai/gemini-3.5-flash",
+  keys_set: { anthropic: false, portkey: false, gemini: false }
+};
+
 export async function getLLMConfig(): Promise<LLMConfig> {
+  if (useMockMode()) {
+    return mockLLMConfig;
+  }
+
   const response = await fetch(`${apiBaseUrl()}/api/admin/llm`);
   if (!response.ok) {
     throw new Error("Failed to load LLM config");
@@ -167,6 +180,10 @@ export async function getLLMConfig(): Promise<LLMConfig> {
 export async function updateLLMConfig(
   patch: Partial<Pick<LLMConfig, "provider" | "anthropic_model" | "gemini_model" | "portkey_model">>
 ): Promise<LLMConfig> {
+  if (useMockMode()) {
+    return { ...mockLLMConfig, ...patch };
+  }
+
   const response = await fetch(`${apiBaseUrl()}/api/admin/llm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

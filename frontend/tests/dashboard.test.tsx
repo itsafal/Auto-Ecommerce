@@ -7,15 +7,20 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() })
 }));
 
+async function renderDashboard() {
+  render(<DashboardPage />);
+  await screen.findByText("Agent Model");
+}
+
 describe("DashboardPage", () => {
-  it("renders trigger button", () => {
-    render(<DashboardPage />);
+  it("renders trigger button", async () => {
+    await renderDashboard();
     expect(screen.getByRole("button", { name: /trigger agent run/i })).toBeInTheDocument();
   });
 
   it("clicking trigger creates visible run_id in mock mode", async () => {
     const user = userEvent.setup();
-    render(<DashboardPage />);
+    await renderDashboard();
 
     await user.click(screen.getByRole("button", { name: /trigger agent run/i }));
 
@@ -27,7 +32,7 @@ describe("DashboardPage", () => {
 
   it("agent timeline renders all five steps", async () => {
     const user = userEvent.setup();
-    render(<DashboardPage />);
+    await renderDashboard();
 
     await user.click(screen.getByRole("button", { name: /trigger agent run/i }));
 
@@ -38,8 +43,8 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Store Creator")).toBeInTheDocument();
   });
 
-  it("launch score renders all score components", () => {
-    render(<DashboardPage />);
+  it("launch score renders all score components", async () => {
+    await renderDashboard();
 
     expect(screen.getByText("Trend score")).toBeInTheDocument();
     expect(screen.getByText("Margin score")).toBeInTheDocument();

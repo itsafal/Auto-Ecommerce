@@ -1,4 +1,4 @@
-# Python
+.venv/
 __pycache__/
 **/__pycache__/
 .pytest_cache/
@@ -8,37 +8,20 @@ __pycache__/
 # Python tooling
 .mypy_cache/
 .ruff_cache/
-.mypy_cache/
 .coverage
 htmlcov/
+dist/
 build/
-
-# uv
-uv.lock
-
-# Env / local secrets
-.env
-.env.*
-!.env.example
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
+*.egg-info/
 
 # Node / Next.js
 node_modules/
 .next/
-.pnpm-store/
 out/
-dist/
 coverage/
 frontend/package-lock.json
 
-# Logs
+# Logs and local OS files
 *.log
 .dstore
 .DS_Store

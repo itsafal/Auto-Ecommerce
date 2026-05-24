@@ -180,6 +180,8 @@ async def _persist_temporal_result(handle, run_id: UUID) -> None:
 
     run_store.upsert_run(result.run)
     run_store.set_events(result.run.run_id, result.events)
+    if result.store is not None:
+        run_store.upsert_store(result.store)
 
 
 @router.post("/demo/trigger", response_model=LaunchTriggerResponse)
@@ -227,18 +229,6 @@ async def get_store(slug: str) -> StoreOutput:
     # In demo mode only, fall back to the magneticmount fixture so the dashboard
     # has something to render before an agent run has populated the store.
     if get_settings().demo_mode and slug == "magneticmount":
-        return _fixture_store(slug=slug)
-
-    raise HTTPException(status_code=404, detail="Store not found")
-
-
-@router.get("/stores/{slug}", response_model=StoreOutput)
-async def get_store(slug: str) -> StoreOutput:
-    for run in run_store._runs.values():
-        if run.slug == slug and run.store_url:
-            return _fixture_store(slug=run.slug, run_id=run.run_id)
-
-    if slug == "magneticmount":
         return _fixture_store(slug=slug)
 
     raise HTTPException(status_code=404, detail="Store not found")
