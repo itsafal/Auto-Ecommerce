@@ -180,6 +180,8 @@ async def _persist_temporal_result(handle, run_id: UUID) -> None:
 
     run_store.upsert_run(result.run)
     run_store.set_events(result.run.run_id, result.events)
+    if result.store is not None:
+        run_store.upsert_store(result.store)
 
 
 @router.post("/demo/trigger", response_model=LaunchTriggerResponse)
