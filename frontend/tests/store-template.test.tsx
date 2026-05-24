@@ -7,10 +7,15 @@ describe("StoreTemplate", () => {
   it("store template renders product config", () => {
     render(<StoreTemplate store={mockStore} />);
 
-    expect(screen.getByRole("heading", { name: "MagSnap Pro" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "MagSnap Pro" })).toBeInTheDocument();
     expect(screen.getByText("Mount your phone in one clean snap.")).toBeInTheDocument();
-    expect(screen.getByText("$29.99")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Buy Now - Ships in 3 days" })).toBeInTheDocument();
-    expect(screen.getByText(/Supplier: Demo Supplier 4821/)).toBeInTheDocument();
+    expect(screen.getAllByText("$29.99").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Buy Now - Ships in 3 days" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Supplier: Demo Supplier 4821/).length).toBeGreaterThan(0);
+    // richer storefront sections
+    expect(screen.getByRole("heading", { name: /Choose your pack/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Frequently asked/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /What customers say/i })).toBeInTheDocument();
+    expect(screen.getByText(/MagSnap Duo Bundle/)).toBeInTheDocument();
   });
 });

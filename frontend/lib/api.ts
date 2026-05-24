@@ -27,14 +27,22 @@ export type AuthResponse = {
   user: AuthUser;
 };
 
-const useMocks = () =>
+export const useMockMode = () =>
   process.env.NEXT_PUBLIC_USE_MOCKS !== "false" ||
   !process.env.NEXT_PUBLIC_API_BASE_URL;
 
 const apiBaseUrl = () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
+const authHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  const token = window.localStorage.getItem("auto_ecommerce_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export async function triggerAgentRun(productName: string): Promise<TriggerResponse> {
-  if (useMocks()) {
+  if (useMockMode()) {
     return {
       run_id: mockRunId,
       status: "started",
@@ -44,7 +52,7 @@ export async function triggerAgentRun(productName: string): Promise<TriggerRespo
 
   const response = await fetch(`${apiBaseUrl()}/api/demo/trigger`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ product_name: productName })
   });
   if (!response.ok) {
@@ -54,7 +62,7 @@ export async function triggerAgentRun(productName: string): Promise<TriggerRespo
 }
 
 export async function getRun(runId: string): Promise<LaunchRun> {
-  if (useMocks()) {
+  if (useMockMode()) {
     return { ...mockRun, run_id: runId };
   }
 
@@ -66,7 +74,7 @@ export async function getRun(runId: string): Promise<LaunchRun> {
 }
 
 export async function getRunEvents(runId: string): Promise<{ run_id: string; events: AgentEvent[] }> {
-  if (useMocks()) {
+  if (useMockMode()) {
     return { run_id: runId, events: mockEvents };
   }
 
@@ -78,7 +86,7 @@ export async function getRunEvents(runId: string): Promise<{ run_id: string; eve
 }
 
 export async function getStore(slug: string): Promise<StoreConfig> {
-  if (useMocks()) {
+  if (useMockMode()) {
     return getStoreBySlug(slug) ?? { ...mockStore, slug };
   }
 
@@ -111,6 +119,62 @@ export async function login(email: string, password: string): Promise<AuthRespon
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     throw new Error(payload?.detail ?? "Failed to sign in");
+  }
+  return response.json();
+}
+
+export async function getTrendingProducts(): Promise<{ products: string[]; source: string }> {
+  if (useMockMode()) {
+    return {
+      products: [
+        "Magnetic Phone Mount",
+        "Portable Power Station",
+        "Red Light Therapy Mask",
+        "Mini Portable Projector",
+        "Smart Ring Fitness Tracker",
+        "Portable Ice Bath",
+        "Smart Desk Lamp",
+        "Ergo Keyboard"
+      ],
+      source: "fixture"
+    };
+  }
+
+  const response = await fetch(`${apiBaseUrl()}/api/agents/trending-products`);
+  if (!response.ok) {
+    throw new Error("Failed to load trending products");
+  }
+  return response.json();
+}
+
+export type LLMConfig = {
+  provider: "auto" | "anthropic" | "portkey" | "gemini" | "google";
+  auto_chain_winner: string;
+  anthropic_model: string;
+  gemini_model: string;
+  portkey_model: string;
+  keys_set: { anthropic: boolean; portkey: boolean; gemini: boolean };
+};
+
+export async function getLLMConfig(): Promise<LLMConfig> {
+  const response = await fetch(`${apiBaseUrl()}/api/admin/llm`);
+  if (!response.ok) {
+    throw new Error("Failed to load LLM config");
+  }
+  return response.json();
+}
+
+export async function updateLLMConfig(
+  patch: Partial<Pick<LLMConfig, "provider" | "anthropic_model" | "gemini_model" | "portkey_model">>
+): Promise<LLMConfig> {
+  const response = await fetch(`${apiBaseUrl()}/api/admin/llm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch)
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? "Failed to update LLM config");
   }
   return response.json();
 }

@@ -1,9 +1,12 @@
 # Python
 __pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
+**/__pycache__/
 .pytest_cache/
+*.py[cod]
+**/*.py[cod]
+
+# Python tooling
+.mypy_cache/
 .ruff_cache/
 .mypy_cache/
 .coverage
@@ -33,6 +36,15 @@ node_modules/
 out/
 dist/
 coverage/
+frontend/package-lock.json
 
 # Logs
 *.log
+.dstore
+.DS_Store
+Thumbs.db
+
+# Local secrets
+.env
+.env.*
+!.env.example

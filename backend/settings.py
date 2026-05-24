@@ -14,6 +14,7 @@ def _env_bool(name: str, default: bool) -> bool:
 @dataclass(frozen=True)
 class Settings:
     use_temporal: bool = False
+    use_agent_fixtures: bool = True
     temporal_address: str = "localhost:7233"
     temporal_namespace: str = "default"
     temporal_task_queue: str = "launch-store"
@@ -21,11 +22,30 @@ class Settings:
     demo_mode: bool = True
     auth_secret: str = "dev-auth-secret-change-me"
     auth_token_ttl_minutes: int = 60 * 24 * 7
+    agent_stream_delay_ms: int = 0
+    # Secure default: production should require auth. Local dev and tests
+    # explicitly disable via REQUIRE_AUTH_FOR_RUNS=false in their .env/conftest.
+    require_auth_for_runs: bool = True
+    google_api_key: str = ""
+    # flash-lite has 1000 req/day free vs flash's 20 req/min, which matters
+    # when the dashboard polls trending products on every mount.
+    gemini_model: str = "gemini-2.5-flash-lite"
+    portkey_api_key: str = ""
+    portkey_base_url: str = "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"
+    portkey_model: str = "@vertexai/gemini-3.5-flash"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-6"
+    # "auto" = try providers in order (portkey, anthropic, gemini) based on which
+    # keys are set. Override with "anthropic" | "portkey" | "gemini" to force one.
+    llm_provider: str = "auto"
+    nimble_api_key: str = ""
+    nimble_api_url: str = ""
 
 
 def get_settings() -> Settings:
     return Settings(
         use_temporal=_env_bool("USE_TEMPORAL", False),
+        use_agent_fixtures=_env_bool("USE_AGENT_FIXTURES", True),
         temporal_address=os.getenv("TEMPORAL_ADDRESS", "localhost:7233"),
         temporal_namespace=os.getenv("TEMPORAL_NAMESPACE", "default"),
         temporal_task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "launch-store"),
@@ -33,4 +53,16 @@ def get_settings() -> Settings:
         demo_mode=_env_bool("DEMO_MODE", True),
         auth_secret=os.getenv("AUTH_SECRET", "dev-auth-secret-change-me"),
         auth_token_ttl_minutes=int(os.getenv("AUTH_TOKEN_TTL_MINUTES", str(60 * 24 * 7))),
+        agent_stream_delay_ms=int(os.getenv("AGENT_STREAM_DELAY_MS", "0")),
+        require_auth_for_runs=_env_bool("REQUIRE_AUTH_FOR_RUNS", True),
+        google_api_key=os.getenv("GOOGLE_API_KEY", ""),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
+        portkey_api_key=os.getenv("PORTKEY_API_KEY", ""),
+        portkey_base_url=os.getenv("PORTKEY_BASE_URL", "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"),
+        portkey_model=os.getenv("PORTKEY_MODEL", "@vertexai/gemini-3.5-flash"),
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+        anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+        llm_provider=(os.getenv("LLM_PROVIDER", "auto") or "auto").strip().lower(),
+        nimble_api_key=os.getenv("NIMBLE_API_KEY", ""),
+        nimble_api_url=os.getenv("NIMBLE_API_URL", ""),
     )

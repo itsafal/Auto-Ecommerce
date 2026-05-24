@@ -23,6 +23,17 @@ export type AgentEvent = {
   payload: Record<string, unknown>;
 };
 
+export type ProductVariant = {
+  name: string;
+  price: number;
+  blurb: string;
+  badge: string;
+  accent: string;
+};
+
+export type FAQItem = { question: string; answer: string };
+export type Review = { name: string; rating: number; text: string };
+
 export type StoreConfig = {
   store_id: string;
   slug: string;
@@ -35,6 +46,11 @@ export type StoreConfig = {
   supplier: string;
   cta_text: string;
   shipping_note: string;
+  features?: string[];
+  specs?: Record<string, string>;
+  variants?: ProductVariant[];
+  faq?: FAQItem[];
+  reviews?: Review[];
 };
 
 export type LaunchScoreBreakdown = {
@@ -126,7 +142,37 @@ export const mockStore: StoreConfig = {
   hero_image_url: "/demo/magnetic-phone-mount.png",
   supplier: "Demo Supplier 4821",
   cta_text: "Buy Now - Ships in 3 days",
-  shipping_note: "Ships in 3 days"
+  shipping_note: "Ships in 3 days · Tracked delivery",
+  features: [
+    "Strong N52 neodymium magnets - no slipping at highway speed",
+    "Adhesive 3M VHB pad for dashboard, vent, or wall mounts",
+    "Compatible with MagSafe and standard cases under 4mm",
+    "Compact footprint, hides cleanly behind your phone",
+    "30-day satisfaction guarantee, free returns"
+  ],
+  specs: {
+    Material: "Aluminum + N52 neodymium",
+    Compatibility: "MagSafe + ring adapter",
+    "Mount type": "Dashboard / vent / wall",
+    Weight: "38g",
+    Warranty: "1 year limited"
+  },
+  variants: [
+    { name: "MagSnap Standard", price: 29.99, blurb: "Single mount with 3M adhesive pad.", badge: "Most popular", accent: "#0f766e" },
+    { name: "MagSnap Pro", price: 39.99, blurb: "Premium aluminum body, stronger magnet array.", badge: "Best build", accent: "#1d4ed8" },
+    { name: "MagSnap Mini", price: 22.99, blurb: "Slimmer profile for compact dashboards.", badge: "Travel", accent: "#9333ea" },
+    { name: "MagSnap Duo Bundle", price: 49.99, blurb: "Two mounts + ring adapter pack.", badge: "Save 18%", accent: "#b45309" }
+  ],
+  faq: [
+    { question: "Will it hold a phone in a heavy case?", answer: "Yes, holds phones up to 250g including most rugged cases under 4mm thick." },
+    { question: "How long does shipping take?", answer: "Orders ship in 3 days with full tracking." },
+    { question: "Does it damage the dashboard?", answer: "3M VHB residue removes cleanly with isopropyl alcohol." }
+  ],
+  reviews: [
+    { name: "Avery K.", rating: 5.0, text: "Holds rock solid on rough roads. Best mount I've owned." },
+    { name: "Jordan M.", rating: 4.5, text: "Sleek and tiny. Magnet is way stronger than expected." },
+    { name: "Priya S.", rating: 5.0, text: "Set up in 30 seconds, working perfectly two months in." }
+  ]
 };
 
 export function getStoreBySlug(slug: string): StoreConfig | null {

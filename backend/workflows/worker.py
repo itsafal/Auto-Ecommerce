@@ -17,12 +17,17 @@ from backend.workflows.launch_store import LaunchStoreWorkflow
 async def main() -> None:
     try:
         from temporalio.client import Client
+        from temporalio.contrib.pydantic import pydantic_data_converter
         from temporalio.worker import Worker
     except ImportError as exc:
         raise RuntimeError("Install the temporal extra to run the Temporal worker.") from exc
 
     settings = get_settings()
-    client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
+    client = await Client.connect(
+        settings.temporal_address,
+        namespace=settings.temporal_namespace,
+        data_converter=pydantic_data_converter,
+    )
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue,

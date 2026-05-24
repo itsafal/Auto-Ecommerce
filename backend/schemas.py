@@ -106,6 +106,25 @@ class RiskOutput(BaseModel):
     recommendation: str
 
 
+class ProductVariant(BaseModel):
+    name: str
+    price: float = Field(ge=0.0)
+    blurb: str = ""
+    badge: str = ""
+    accent: str = "#0f766e"
+
+
+class FAQItem(BaseModel):
+    question: str
+    answer: str
+
+
+class Review(BaseModel):
+    name: str
+    rating: float = Field(ge=0.0, le=5.0)
+    text: str
+
+
 class AdvertisingOutput(BaseModel):
     product_name: str
     tagline: str
@@ -113,6 +132,12 @@ class AdvertisingOutput(BaseModel):
     cta_text: str
     hero_image_prompt: str
     hero_image_url: str
+    features: list[str] = Field(default_factory=list)
+    specs: dict[str, str] = Field(default_factory=dict)
+    variants: list[ProductVariant] = Field(default_factory=list)
+    faq: list[FAQItem] = Field(default_factory=list)
+    reviews: list[Review] = Field(default_factory=list)
+    shipping_note: str = ""
 
 
 class StoreOutput(BaseModel):
@@ -120,11 +145,18 @@ class StoreOutput(BaseModel):
     slug: str
     store_url: str
     product_name: str
+    tagline: str = ""
     description: str
     price: float = Field(ge=0.0)
     hero_image_url: str
     supplier: str
     cta_text: str
+    features: list[str] = Field(default_factory=list)
+    specs: dict[str, str] = Field(default_factory=dict)
+    variants: list[ProductVariant] = Field(default_factory=list)
+    faq: list[FAQItem] = Field(default_factory=list)
+    reviews: list[Review] = Field(default_factory=list)
+    shipping_note: str = ""
 
 
 class LaunchScoreOutput(BaseModel):
@@ -170,3 +202,4 @@ class WorkflowInput(BaseModel):
 class WorkflowResult(BaseModel):
     run: LaunchRun
     events: list[AgentEvent]
+    store: StoreOutput | None = None
