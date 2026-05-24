@@ -1,0 +1,48 @@
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border, #d7dde7);
+  border-radius: 6px;
+  background: var(--surface, #ffffff);
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.tab {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted, #8b97a8);
+  font: 11px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.tab:hover {
+  background: var(--surface-2, #f8fafc);
+  color: var(--text, #e6edf3);
+}
+
+.tab[data-active="true"] {
+  background: color-mix(in srgb, var(--accent, #5fd3a3) 18%, var(--surface, #11161d));
+  color: var(--accent, #5fd3a3);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.right {
+  color: var(--text-dim, #5d6a7c);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-right: 10px;
+}

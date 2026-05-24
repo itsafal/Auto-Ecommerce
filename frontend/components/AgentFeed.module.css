@@ -1,8 +1,9 @@
+/* Reads dashboard tokens; falls back to light palette outside the dashboard. */
 .panel {
-  padding: 20px;
-  border: 1px solid #d7dde7;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 16px;
+  border: 1px solid var(--border, #d7dde7);
+  border-radius: 6px;
+  background: var(--surface, #ffffff);
 }
 
 .header {
@@ -14,55 +15,63 @@
 
 .panel h2 {
   margin: 0;
-  font-size: 18px;
+  font: 11px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .count {
-  color: #64748b;
-  font-size: 13px;
+  font: 11px var(--mono, ui-monospace, monospace);
+  color: var(--text-dim, #94a3b8);
+  letter-spacing: 0.04em;
 }
 
 .feed {
   display: grid;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 0;
+  margin-top: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 4px;
+  background: var(--surface-2, #f8fafc);
 }
 
 .empty {
   margin: 0;
-  padding: 20px;
+  padding: 18px;
   text-align: center;
-  color: #64748b;
-  background: #f8fafc;
-  border-radius: 8px;
-  border: 1px dashed #cbd5e1;
+  color: var(--text-dim, #94a3b8);
+  background: transparent;
+  border: 1px dashed var(--border-strong, #cbd5e1);
+  border-radius: 4px;
+  font: 12px var(--mono, ui-monospace, monospace);
 }
 
 .event {
-  padding: 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
-  animation: fadeIn 0.3s ease;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  background: transparent;
+  font: 12px var(--mono, ui-monospace, monospace);
+  animation: fadeIn 0.2s ease;
+}
+
+.event:last-child {
+  border-bottom: 0;
 }
 
 .event[data-status="running"] {
-  border-color: #0f766e;
-  background: #ecfdf5;
-}
-
-.event[data-status="completed"] {
-  border-color: #d1fae5;
+  background: color-mix(in srgb, var(--accent, #0f766e) 8%, transparent);
 }
 
 .event[data-status="failed"] {
-  border-color: #fecaca;
-  background: #fef2f2;
+  background: color-mix(in srgb, var(--danger, #b91c1c) 8%, transparent);
 }
 
 .event[data-status="fallback_used"] {
-  border-color: #fde68a;
-  background: #fffbeb;
+  background: color-mix(in srgb, var(--accent-2, #fde68a) 10%, transparent);
 }
 
 .eventHeader {
@@ -73,54 +82,61 @@
 }
 
 .event strong {
-  text-transform: capitalize;
+  color: var(--text, #0f172a);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
 }
 
 .status {
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  text-transform: capitalize;
-  background: #e2e8f0;
-  color: #475569;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font: 10px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--surface-3, #e2e8f0);
+  color: var(--text-muted, #475569);
 }
 
 .status[data-status="running"] {
-  background: #0f766e;
-  color: #ffffff;
+  background: color-mix(in srgb, var(--accent, #0f766e) 24%, transparent);
+  color: var(--accent, #0f766e);
 }
 
 .status[data-status="completed"] {
-  background: #d1fae5;
-  color: #047857;
+  background: color-mix(in srgb, var(--accent, #0f766e) 16%, transparent);
+  color: var(--accent, #047857);
 }
 
 .status[data-status="failed"] {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: color-mix(in srgb, var(--danger, #b91c1c) 20%, transparent);
+  color: var(--danger, #b91c1c);
 }
 
 .status[data-status="fallback_used"] {
-  background: #fde68a;
-  color: #92400e;
+  background: color-mix(in srgb, var(--accent-2, #fde68a) 25%, transparent);
+  color: var(--accent-2, #92400e);
 }
 
 .event p {
-  margin: 8px 0 0;
-  color: #334155;
+  margin: 4px 0 0;
+  color: var(--text-muted, #334155);
+  font-size: 12px;
 }
 
 .time {
   display: block;
-  margin-top: 6px;
-  color: #94a3b8;
-  font-size: 12px;
+  margin-top: 4px;
+  color: var(--text-dim, #94a3b8);
+  font-size: 11px;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(-2px);
   }
   to {
     opacity: 1;

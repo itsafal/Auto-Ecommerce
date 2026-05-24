@@ -105,4 +105,10 @@ async def update_llm_config(request: LLMUpdateRequest) -> LLMSnapshot:
     if request.portkey_model is not None:
         os.environ["PORTKEY_MODEL"] = request.portkey_model
 
+    # Bust the trending-products cache so the next dashboard refresh hits
+    # the newly-selected LLM instead of serving up to 60s of stale results.
+    from backend.workflows.activities import invalidate_trending_cache
+
+    invalidate_trending_cache()
+
     return _snapshot()

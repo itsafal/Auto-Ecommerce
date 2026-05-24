@@ -34,6 +34,17 @@ export type ProductVariant = {
 export type FAQItem = { question: string; answer: string };
 export type Review = { name: string; rating: number; text: string };
 
+export type StoreTheme = {
+  primary?: string;
+  accent?: string;
+  bg?: string;
+  surface?: string;
+  text?: string;
+  text_muted?: string;
+  border?: string;
+  font_pair?: "serif-elegant" | "sans-modern" | "mono-tech";
+};
+
 export type StoreConfig = {
   store_id: string;
   slug: string;
@@ -51,6 +62,7 @@ export type StoreConfig = {
   variants?: ProductVariant[];
   faq?: FAQItem[];
   reviews?: Review[];
+  theme?: StoreTheme | null;
 };
 
 export type LaunchScoreBreakdown = {
@@ -72,7 +84,7 @@ export const mockRun: LaunchRun = {
   status: "completed",
   launch_score: 0.615,
   decision: "launch",
-  store_url: "https://magneticmount.fastaisolution.com",
+  store_url: "http://magneticmount.localhost:3000",
   error: null
 };
 
@@ -124,16 +136,16 @@ export const mockEvents: AgentEvent[] = [
   {
     agent_name: "store_creator",
     event_type: "completed",
-    message: "Store created at https://magneticmount.fastaisolution.com",
+    message: "Store created at http://magneticmount.localhost:3000",
     timestamp: "2026-05-23T17:30:36Z",
-    payload: { store_url: "https://magneticmount.fastaisolution.com" }
+    payload: { store_url: "http://magneticmount.localhost:3000" }
   }
 ];
 
 export const mockStore: StoreConfig = {
   store_id: "14ddc76c-e9cc-42d3-a280-79d6f5a73b49",
   slug: "magneticmount",
-  store_url: "https://magneticmount.fastaisolution.com",
+  store_url: "http://magneticmount.localhost:3000",
   product_name: "MagSnap Pro",
   tagline: "Mount your phone in one clean snap.",
   description:

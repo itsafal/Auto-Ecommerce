@@ -63,9 +63,26 @@ CREATE TABLE IF NOT EXISTS launch_runs (
     store_url String DEFAULT '',
     started_at DateTime DEFAULT now(),
     completed_at Nullable(DateTime),
-    error Nullable(String)
+    error Nullable(String),
+    -- Batch deployment fields; null/0 for single-trigger runs.
+    batch_id Nullable(UUID),
+    batch_slot Nullable(UInt8),
+    attempt_index UInt8 DEFAULT 1
 ) ENGINE = MergeTree()
 ORDER BY (started_at, run_id);
+
+-- Idempotent migration for environments that already have the table.
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS batch_id Nullable(UUID);
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS batch_slot Nullable(UInt8);
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS attempt_index UInt8 DEFAULT 1;
+
+-- Businesses portfolio lifecycle (Phase D).
+-- Empty string means "not yet promoted to business" (i.e. failed/rejected run).
+-- 'live' = launched and running; 'shutdown' = manually taken down; 'archived' = no longer counted.
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS business_status LowCardinality(String) DEFAULT '';
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS launched_at Nullable(DateTime);
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS shutdown_at Nullable(DateTime);
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS shutdown_reason String DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS agent_events (
     run_id UUID,

@@ -4,41 +4,34 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AgentFeed } from "@/components/AgentFeed";
 import { AgentTimeline } from "@/components/AgentTimeline";
+import { AppNav } from "@/components/AppNav";
+import { BatchPanel } from "@/components/BatchPanel";
 import { LaunchScore } from "@/components/LaunchScore";
 import { ModelPicker } from "@/components/ModelPicker";
-import {
-  getCurrentUser,
-  getRun,
-  getRunEvents,
-  getTrendingProducts,
-  triggerAgentRun,
-  useMockMode
-} from "@/lib/api";
+import { getCurrentUser, getRun, getRunEvents, useMockMode } from "@/lib/api";
 import { type AgentEvent, type LaunchRun, mockEvents, mockRun, mockScore } from "@/lib/mock-data";
 import styles from "./page.module.css";
 
-const fallbackProducts = [
-  "Magnetic Phone Mount",
-  "Portable Power Station",
-  "Red Light Therapy Mask",
-  "Mini Portable Projector",
-  "Smart Ring Fitness Tracker",
-  "Portable Ice Bath",
-  "Smart Desk Lamp",
-  "Ergo Keyboard",
-  "Portable Blender"
-];
+function formatLatency(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+function shortRunId(id: string | null): string {
+  if (!id) return "—";
+  return id.split("-")[0] + "…";
+}
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [productName, setProductName] = useState("Magnetic Phone Mount");
+  // runId is driven by BatchPanel via onActiveRunChange — the dashboard no
+  // longer triggers a single product run itself; the read-only detail panels
+  // (run strip, agent pipeline, event feed, launch score, final URL) follow
+  // whichever slot in the latest batch is currently most interesting.
   const [runId, setRunId] = useState<string | null>(null);
   const [run, setRun] = useState<LaunchRun | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
-  const [isTriggering, setIsTriggering] = useState(false);
-  const [trendingProducts, setTrendingProducts] = useState<string[]>(fallbackProducts);
-  const [trendingSource, setTrendingSource] = useState<string>("fixture");
-  const [isLoadingTrends, setIsLoadingTrends] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSessionReady, setIsSessionReady] = useState(useMockMode);
 
@@ -69,6 +62,16 @@ export default function DashboardPage() {
     };
   }, [run, events]);
 
+  /** Run wall-clock latency = (last event timestamp) - (first event timestamp). */
+  const runLatencyMs = useMemo<number | null>(() => {
+    if (events.length < 2) return null;
+    const stamps = events
+      .map((e) => new Date(e.timestamp).getTime())
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (stamps.length < 2) return null;
+    return Math.max(...stamps) - Math.min(...stamps);
+  }, [events]);
+
   useEffect(() => {
     if (useMockMode()) {
       return;
@@ -89,43 +92,13 @@ export default function DashboardPage() {
       });
   }, [router]);
 
-  async function refreshTrends() {
-    setIsLoadingTrends(true);
-    try {
-      const res = await getTrendingProducts();
-      if (res.products.length > 0) {
-        setTrendingProducts(res.products);
-        setTrendingSource(res.source);
-        if (!res.products.includes(productName)) {
-          setProductName(res.products[0]);
-        }
-      }
-    } catch {
-      // keep fallback list silently
-    } finally {
-      setIsLoadingTrends(false);
-    }
-  }
-
+  // Whenever the focused runId changes (set by BatchPanel as slots progress),
+  // reset the local run+events so the detail panels show clean state while
+  // we re-poll the freshly-focused slot.
   useEffect(() => {
-    refreshTrends();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function handleTrigger() {
-    setIsTriggering(true);
-    setError(null);
-    setEvents([]);
     setRun(null);
-    try {
-      const response = await triggerAgentRun(productName);
-      setRunId(response.run_id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to trigger agent run");
-    } finally {
-      setIsTriggering(false);
-    }
-  }
+    setEvents([]);
+  }, [runId]);
 
   useEffect(() => {
     if (!runId) {
@@ -172,86 +145,66 @@ export default function DashboardPage() {
     );
   }
 
+  const displayStatus = runId ? visibleRun.status : "waiting";
+  const displayDecision = runId ? (visibleRun.decision || "pending") : "pending";
+  const displayScore = runId && visibleRun.launch_score != null
+    ? visibleRun.launch_score.toFixed(3)
+    : "—";
+  const decisionState =
+    displayDecision === "launch" ? "ok"
+    : displayDecision === "pause" ? "warn"
+    : "muted";
+
   return (
     <main className={styles.shell}>
+      <AppNav />
       <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Operator dashboard</p>
-          <h1>Live Agent Run</h1>
+        <div className={styles.brandLockup}>
+          <span className={styles.statusDot} />
+          AUTO-ECOMMERCE
+          <span className={styles.statusText}>● ONLINE</span>
         </div>
-        {visibleRun.store_url ? (
-          <a href={visibleRun.store_url} className={styles.storeLink}>
-            {visibleRun.store_url.replace(/^https?:\/\//, "")}
+        {runId && run?.store_url ? (
+          <a href={run.store_url} className={styles.storeLink}>
+            {run.store_url.replace(/^https?:\/\//, "")}
           </a>
         ) : (
-          <span className={styles.storeLink}>pending...</span>
+          <span className={styles.storeLink} data-pending="true">
+            {runId ? "store: provisioning" : "no run yet"}
+          </span>
         )}
       </header>
-
-      <section className={styles.controlPanel}>
-        <label>
-          Product to test
-          <input
-            list="demo-products"
-            value={productName}
-            onChange={(event) => setProductName(event.target.value)}
-          />
-          <div className={styles.trendHeader}>
-            <span className={styles.trendLabel}>
-              Trend Scout {trendingSource === "gemini" ? "· live (Gemini)" : "· fixture"}
-            </span>
-            <button
-              type="button"
-              className={styles.trendRefresh}
-              onClick={refreshTrends}
-              disabled={isLoadingTrends || isTriggering}
-            >
-              {isLoadingTrends ? "Scanning..." : "Refresh trends"}
-            </button>
-          </div>
-          <div className={styles.chips}>
-            {trendingProducts.map((product) => (
-              <button
-                type="button"
-                key={product}
-                className={styles.chip}
-                data-active={product === productName}
-                onClick={() => setProductName(product)}
-                disabled={isTriggering}
-              >
-                {product}
-              </button>
-            ))}
-          </div>
-          <datalist id="demo-products">
-            {trendingProducts.map((product) => (
-              <option key={product} value={product} />
-            ))}
-          </datalist>
-        </label>
-        <button onClick={handleTrigger} disabled={isTriggering}>
-          {isTriggering ? "Starting..." : "Trigger Agent Run"}
-        </button>
-      </section>
 
       <section className={styles.controlPanel}>
         <ModelPicker />
       </section>
 
+      <BatchPanel onActiveRunChange={setRunId} />
+
       {error ? <p className={styles.error}>{error}</p> : null}
 
       <section className={styles.runStrip}>
         <div>
-          <span>run_id</span>
-          <strong>{runId ?? "No run yet"}</strong>
+          <span>RUN_ID</span>
+          <strong title={runId ?? "No run yet"}>{shortRunId(runId)}</strong>
         </div>
         <div>
-          <span>Status</span>
-          <strong>{runId ? visibleRun.status : "waiting"}</strong>
+          <span>STATUS</span>
+          <strong data-state={runId && visibleRun.status?.includes("completed") ? "ok" : "muted"}>
+            {displayStatus}
+          </strong>
         </div>
         <div>
-          <span>Decision</span>
-          <strong>{runId ? visibleRun.decision : "pending"}</strong>
+          <span>DECISION</span>
+          <strong data-state={decisionState}>{displayDecision}</strong>
+        </div>
+        <div>
+          <span>SCORE</span>
+          <strong data-state={displayScore !== "—" ? "warn" : "muted"}>{displayScore}</strong>
+        </div>
+        <div>
+          <span>LATENCY</span>
+          <strong data-state="muted">{formatLatency(runLatencyMs)}</strong>
         </div>
       </section>
 
@@ -263,11 +216,11 @@ export default function DashboardPage() {
         <aside className={styles.secondary}>
           <LaunchScore score={score} />
           <section className={styles.finalUrl}>
-            <h2>Final Store URL</h2>
-            {visibleRun.store_url ? (
-              <a href={visibleRun.store_url}>{visibleRun.store_url}</a>
+            <h2>FINAL STORE URL</h2>
+            {runId && run?.store_url ? (
+              <a href={run.store_url}>{run.store_url}</a>
             ) : (
-              <p>Provisioning storefront...</p>
+              <p>{runId ? "Provisioning storefront..." : "No store yet — trigger a run."}</p>
             )}
           </section>
         </aside>

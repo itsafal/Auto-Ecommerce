@@ -1,7 +1,34 @@
 .shell {
+  /* Default theme tokens. The agent's StoreTheme overrides these by setting
+     the same custom properties as inline styles on the .shell root, so any
+     missing token quietly falls back to this teal palette. */
+  --accent: #0f766e;
+  --accent-hover: #0d5d56;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --text: #0f172a;
+  --text-muted: #475569;
+  --border: #e2e8f0;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Fraunces", "Playfair Display", "EB Garamond", Georgia, serif;
+  --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
+  --font-body: var(--font-sans);
+
   min-height: 100vh;
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+/* Three typography modes the theme agent picks from. */
+.shell[data-font-pair="serif-elegant"] {
+  --font-body: var(--font-serif);
+}
+.shell[data-font-pair="sans-modern"] {
+  --font-body: var(--font-sans);
+}
+.shell[data-font-pair="mono-tech"] {
+  --font-body: var(--font-mono);
 }
 
 .topbar {
@@ -15,7 +42,7 @@
   padding: 14px 24px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: saturate(140%) blur(6px);
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border);
 }
 
 .brand {
@@ -26,7 +53,7 @@
 .domain {
   flex: 1;
   text-align: center;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -36,7 +63,7 @@
 .navCta {
   padding: 8px 14px;
   border-radius: 999px;
-  background: #0f766e;
+  background: var(--accent);
   color: #ffffff;
   font-weight: 800;
   font-size: 13px;
@@ -55,11 +82,21 @@
 
 .eyebrow {
   margin: 0;
-  color: #0f766e;
+  color: var(--accent);
   font-weight: 800;
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* Without min-width: 0, a long unbreakable brand string in the h1 (e.g.
+   "Posture-CorrectingSmartBackBraceWithAppFeedback") blows the column
+   past the grid's minmax(0, 1fr) constraint and pushes the title into
+   the hero image column. overflow-wrap: anywhere lets it wrap mid-word. */
+.copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .copy h1 {
@@ -67,6 +104,8 @@
   max-width: 680px;
   font-size: 58px;
   line-height: 1;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .tagline {
@@ -74,13 +113,13 @@
   max-width: 620px;
   font-size: 24px;
   line-height: 1.3;
-  color: #334155;
+  color: var(--text-muted);
 }
 
 .description {
   margin: 18px 0 0;
   max-width: 620px;
-  color: #475569;
+  color: var(--text-muted);
   font-size: 18px;
   line-height: 1.7;
 }
@@ -105,7 +144,7 @@
   min-height: 48px;
   padding: 0 24px;
   border-radius: 8px;
-  background: #0f766e;
+  background: var(--accent);
   color: #ffffff;
   font-weight: 800;
   text-decoration: none;
@@ -117,7 +156,7 @@
 
 .supplier {
   margin: 18px 0 0;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 14px;
 }
 
@@ -125,11 +164,20 @@
   display: grid;
   place-items: center;
   min-height: 420px;
-  border: 1px solid #d7dde7;
+  border: 1px solid var(--border);
   border-radius: 16px;
   background:
-    linear-gradient(135deg, rgba(15, 118, 110, 0.16), transparent 45%),
-    #ffffff;
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 45%),
+    var(--surface);
+}
+
+/* Real product photo from Nimble, rendered instead of the CSS device mockup. */
+.heroImage {
+  width: 100%;
+  height: 100%;
+  max-height: 480px;
+  object-fit: contain;
+  padding: 24px;
 }
 
 .device {
@@ -143,7 +191,7 @@
   inset: 12% 19%;
   border: 10px solid #111827;
   border-radius: 30px;
-  background: linear-gradient(180deg, #e2e8f0, #ffffff);
+  background: linear-gradient(180deg, var(--border), var(--surface));
   box-shadow: 0 24px 44px rgba(15, 23, 42, 0.18);
 }
 
@@ -154,7 +202,7 @@
   bottom: 4%;
   height: 38%;
   border-radius: 999px 999px 16px 16px;
-  background: #0f766e;
+  background: var(--accent);
 }
 
 .section {
@@ -179,8 +227,8 @@
 
 .features li {
   padding: 18px 20px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   font-size: 15px;
   line-height: 1.5;
@@ -197,7 +245,7 @@
   height: 18px;
   display: grid;
   place-items: center;
-  background: #0f766e;
+  background: var(--accent);
   color: #fff;
   border-radius: 50%;
   font-size: 11px;
@@ -216,9 +264,9 @@
   flex-direction: column;
   gap: 10px;
   padding: 24px 20px 20px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-top: 4px solid #0f766e;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
   border-radius: 12px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -233,7 +281,7 @@
   top: -10px;
   left: 20px;
   padding: 4px 10px;
-  background: #0f766e;
+  background: var(--accent);
   color: #ffffff;
   font-size: 11px;
   font-weight: 800;
@@ -249,7 +297,7 @@
 
 .variantBlurb {
   margin: 0;
-  color: #475569;
+  color: var(--text-muted);
   font-size: 14px;
   line-height: 1.5;
   min-height: 42px;
@@ -271,7 +319,7 @@
 .variantCta {
   padding: 8px 14px;
   border-radius: 8px;
-  background: #0f766e;
+  background: var(--accent);
   color: #ffffff;
   font-weight: 800;
   font-size: 13px;
@@ -282,8 +330,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 8px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 8px;
 }
@@ -296,11 +344,11 @@
 }
 
 .specRow:nth-child(odd) {
-  background: #f8fafc;
+  background: var(--bg);
 }
 
 .specKey {
-  color: #64748b;
+  color: var(--text-muted);
   font-weight: 600;
   font-size: 14px;
 }
@@ -318,8 +366,8 @@
 
 .reviewCard {
   padding: 20px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
 }
 
@@ -331,12 +379,12 @@
 
 .reviewCard p {
   margin: 10px 0;
-  color: #334155;
+  color: var(--text-muted);
   line-height: 1.5;
 }
 
 .reviewer {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -346,8 +394,8 @@
 }
 
 .faqItem {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px 18px;
 }
@@ -365,7 +413,7 @@
 .faqItem summary::after {
   content: "＋";
   float: right;
-  color: #0f766e;
+  color: var(--accent);
   font-weight: 800;
 }
 
@@ -375,7 +423,7 @@
 
 .faqItem p {
   margin: 12px 0 0;
-  color: #475569;
+  color: var(--text-muted);
   line-height: 1.6;
 }
 
@@ -384,7 +432,7 @@
   margin: 24px auto 0;
   padding: 48px 24px 64px;
   text-align: center;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border);
 }
 
 .footer h2 {
@@ -394,7 +442,7 @@
 
 .legal {
   margin: 22px 0 0;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 13px;
 }
 

@@ -1,132 +1,156 @@
+/* Reads tokens from the dashboard .shell parent; falls back to a light palette
+   if rendered outside the dashboard (tests / Storybook). */
 .panel {
-  padding: 20px;
-  border: 1px solid #d7dde7;
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 16px;
+  border: 1px solid var(--border, #d7dde7);
+  border-radius: 6px;
+  background: var(--surface, #ffffff);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  align-items: center;
+  align-items: baseline;
 }
 
 .header h2 {
   margin: 0;
-  font-size: 18px;
+  font: 11px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .header span {
-  color: #64748b;
-  font-size: 14px;
+  font: 11px var(--mono, ui-monospace, monospace);
+  color: var(--text-dim, #94a3b8);
+  letter-spacing: 0.04em;
 }
 
 .progressBar {
   position: relative;
   width: 100%;
-  height: 6px;
-  margin-top: 16px;
-  background: #e2e8f0;
-  border-radius: 999px;
+  height: 3px;
+  margin-top: 12px;
+  background: var(--border, #e2e8f0);
+  border-radius: 0;
   overflow: hidden;
 }
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, #0f766e, #14b8a6);
-  border-radius: 999px;
+  background: var(--accent, #0f766e);
   transition: width 0.4s ease;
 }
 
 .timeline {
   display: grid;
-  grid-template-columns: repeat(6, minmax(110px, 1fr));
-  gap: 10px;
-  margin-top: 18px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 14px;
 }
 
 .step {
-  min-height: 108px;
-  padding: 14px;
-  border: 1px solid #d7dde7;
-  border-radius: 8px;
-  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 78px;
+  padding: 10px;
+  border: 1px solid var(--border, #d7dde7);
+  border-radius: 4px;
+  background: var(--surface-2, #f8fafc);
 }
 
 .dot {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--text-dim, #94a3b8);
 }
 
 .name {
   display: block;
-  margin-top: 16px;
-  font-weight: 800;
+  margin-top: auto;
+  color: var(--text, #0f172a);
+  font: 11px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .status {
   display: block;
-  margin-top: 8px;
-  color: #64748b;
-  font-size: 13px;
+  color: var(--text-muted, #64748b);
+  font: 10px var(--mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .step[data-status="running"] {
-  border-color: #0f766e;
-  background: #ecfdf5;
+  border-color: var(--accent, #0f766e);
 }
 
 .step[data-status="running"] .dot {
-  background: #0f766e;
-  box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.6);
+  background: var(--accent, #0f766e);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #0f766e) 60%, transparent);
   animation: pulse 1.2s infinite;
 }
 
+.step[data-status="running"] .status {
+  color: var(--accent, #0f766e);
+}
+
 .step[data-status="fallback_used"] .dot {
-  background: #b45309;
+  background: var(--accent-2, #b45309);
 }
 
 .step[data-status="completed"] {
-  border-color: #0f766e;
+  border-color: color-mix(in srgb, var(--accent, #0f766e) 60%, var(--border, #d7dde7));
 }
 
 .step[data-status="completed"] .dot {
-  background: #0f766e;
+  background: var(--accent, #0f766e);
+}
+
+.step[data-status="completed"] .status {
+  color: var(--accent, #0f766e);
 }
 
 .step[data-status="failed"] {
-  border-color: #b91c1c;
-  background: #fef2f2;
+  border-color: var(--danger, #b91c1c);
 }
 
 .step[data-status="failed"] .dot {
-  background: #b91c1c;
+  background: var(--danger, #b91c1c);
+}
+
+.step[data-status="failed"] .status {
+  color: var(--danger, #b91c1c);
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.55);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #0f766e) 55%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 10px rgba(15, 118, 110, 0);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent, #0f766e) 0%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #0f766e) 0%, transparent);
   }
 }
 
 @media (max-width: 900px) {
   .timeline {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 540px) {
   .timeline {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }

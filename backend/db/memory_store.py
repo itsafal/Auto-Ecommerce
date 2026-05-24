@@ -44,6 +44,9 @@ class MemoryStore:
         slug: str,
         status: str = "started",
         temporal_workflow_id: str = "",
+        batch_id: str | None = None,
+        batch_slot: int | None = None,
+        attempt_index: int = 1,
     ) -> dict[str, Any]:
         with self._lock:
             record = {
@@ -58,9 +61,18 @@ class MemoryStore:
                 "started_at": _utcnow(),
                 "completed_at": None,
                 "error": None,
+                "batch_id": batch_id,
+                "batch_slot": batch_slot,
+                "attempt_index": int(attempt_index or 1),
             }
             self._runs[run_id] = record
             return deepcopy(record)
+
+    def list_runs_by_batch(self, batch_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            runs = [r for r in self._runs.values() if r.get("batch_id") == batch_id]
+            runs.sort(key=lambda r: (r.get("batch_slot") or 0, r.get("attempt_index") or 0))
+            return [deepcopy(r) for r in runs]
 
     def update_run(self, run_id: str, **fields: Any) -> dict[str, Any]:
         with self._lock:
@@ -157,6 +169,19 @@ class MemoryStore:
             record.setdefault("detected_at", _utcnow())
             self._trend_signals.append(record)
             return deepcopy(record)
+
+    def recently_tried_products(self, window_days: int) -> set[str]:
+        """Distinct lowercased product names researched in the last N days."""
+        from datetime import timedelta
+
+        with self._lock:
+            cutoff = _utcnow() - timedelta(days=int(window_days))
+            return {
+                str(s.get("product_name", "")).strip().lower()
+                for s in self._trend_signals
+                if s.get("detected_at") and s["detected_at"] >= cutoff
+                and s.get("product_name")
+            }
 
     def list_trend_signals(self, limit: int = 50) -> list[dict[str, Any]]:
         with self._lock:

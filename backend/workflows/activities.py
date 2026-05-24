@@ -33,6 +33,7 @@ from backend.schemas import (
     RiskOutput,
     RunStatus,
     StoreOutput,
+    StoreTheme,
     WorkflowInput,
     WorkflowResult,
 )
@@ -192,7 +193,7 @@ def _product_profile(product_name: str) -> dict:
         "high": 69.0,
         "unit_cost": 14.0,
         "shipping_days": 7,
-        "brand": f"{title.replace(' ', '')} Co",
+        "brand": f"{title} Co",
         "tagline": f"A sharper way to buy {product_name}.",
         "description": f"A focused, benefit-led storefront for {product_name} with clear pricing and fast purchase flow.",
         "hero": f"/demo/{slugify_product(product_name)}.png",
@@ -369,6 +370,18 @@ _TRENDING_CACHE_AT: float = 0.0
 _TRENDING_CACHE_TTL_SECONDS = 60.0
 
 
+def invalidate_trending_cache() -> None:
+    """Force the next /api/agents/trending-products call to hit the LLM.
+
+    Called by /api/admin/llm when the operator swaps provider/model so the
+    dashboard immediately reflects the new model instead of serving the
+    last cached Gemini/Claude/Portkey result for up to 60s.
+    """
+    global _TRENDING_CACHE, _TRENDING_CACHE_AT
+    _TRENDING_CACHE = None
+    _TRENDING_CACHE_AT = 0.0
+
+
 async def discover_trending_products(limit: int = 8) -> dict:
     """Trend Scout agent: returns a list of currently trending DTC product names.
 
@@ -418,6 +431,75 @@ async def discover_trending_products(limit: int = 8) -> dict:
     return dict(response)
 
 
+async def discover_new_trending_products(
+    limit: int,
+    exclude: set[str] | None = None,
+) -> list[str]:
+    """Trend Scout output filtered to products NOT in `exclude` (case-insensitive).
+
+    If Trend Scout returns fewer than `limit` fresh items, top up with a direct
+    LLM call that's explicitly told to avoid the excluded list. Falls back to
+    the curated _FALLBACK_TRENDING (also filtered) if both paths come up short.
+
+    The `exclude` set is expected to hold lowercased, stripped product names —
+    see `run_store.recently_tried_products()` for the canonical producer.
+
+    NOTE: future work — allow a re-attempt when a product later scores higher
+    under different market conditions. For now we always prefer fresh ground.
+    """
+    excluded = {n.strip().lower() for n in (exclude or set()) if n}
+
+    def _filter(names: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for name in names:
+            key = str(name).strip().lower()
+            if not key or key in excluded or key in seen:
+                continue
+            seen.add(key)
+            out.append(str(name).strip())
+        return out
+
+    # 1) Existing Trend Scout pool (already cached + LLM-backed).
+    scout = await discover_trending_products(limit=min(limit * 3, 20))
+    fresh = _filter(scout.get("products", []))
+
+    # 2) Top up with a fresh LLM call if we're short.
+    if len(fresh) < limit:
+        prompt = (
+            f"Suggest {limit * 2} trending one-product e-commerce dropshipping ideas. "
+            "Mix tech, wellness, home, fitness, lifestyle, kitchen.\n"
+            f"AVOID these products (already tried recently): {sorted(excluded)[:40]}.\n"
+            'Return ONLY JSON: {"products": ["...", ...]}. No commentary.'
+        )
+        result = await _llm_json(prompt, ignore_fixture_flag=True)
+        if isinstance(result, dict):
+            raw = result.get("products") or result.get("items") or []
+            if isinstance(raw, list):
+                fresh.extend(_filter([str(x) for x in raw]))
+
+    # 3) Last-resort curated fallback (also filtered).
+    if len(fresh) < limit:
+        import random
+
+        pool = _filter(list(_FALLBACK_TRENDING))
+        random.shuffle(pool)
+        fresh.extend(pool)
+
+    # Dedupe preserving order, cap to limit.
+    seen: set[str] = set()
+    final: list[str] = []
+    for name in fresh:
+        key = name.strip().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        final.append(name)
+        if len(final) >= limit:
+            break
+    return final
+
+
 def make_event(
     agent_name: AgentName,
     event_type: EventType,
@@ -458,6 +540,10 @@ async def research_activity(product_name: str) -> ResearchOutput:
 
     nimble = await fetch_serp_summary(product_name)
 
+    # Pull real product photos out of Nimble's ShoppingResult entries so the
+    # storefront can render an actual product image instead of the CSS mockup.
+    product_images: list[str] = (nimble or {}).get("shopping_thumbnails") or []
+
     if nimble:
         # 2. Ground Gemini in the actual SERP data instead of letting it hallucinate.
         prompt = f"""
@@ -494,7 +580,11 @@ Return JSON only (numbers must reflect the SERP data above, not hallucinated):
                 }
             try:
                 return _persist_trend_signal(
-                    ResearchOutput(product_name=product_name, **generated),
+                    ResearchOutput(
+                        product_name=product_name,
+                        product_images=product_images,
+                        **generated,
+                    ),
                     source="nimble_serp",
                 )
             except Exception:
@@ -518,7 +608,11 @@ Product: {product_name}
     if generated:
         try:
             return _persist_trend_signal(
-                ResearchOutput(product_name=product_name, **generated),
+                ResearchOutput(
+                    product_name=product_name,
+                    product_images=product_images,
+                    **generated,
+                ),
                 source="gemini",
             )
         except Exception:
@@ -536,6 +630,7 @@ Product: {product_name}
             competitor_summary=profile["summary"],
             price_range={"low": profile["low"], "high": profile["high"]},
             confidence=0.82,
+            product_images=product_images,
         ),
         source="fixture",
     )
@@ -728,6 +823,74 @@ Risk note: {risk.recommendation}
     )
 
 
+_HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}){1,2}$")
+_ALLOWED_FONT_PAIRS = {"serif-elegant", "sans-modern", "mono-tech"}
+
+
+def _safe_hex(value, fallback: str) -> str:
+    if isinstance(value, str) and _HEX_COLOR_RE.match(value.strip()):
+        return value.strip()
+    return fallback
+
+
+@activity.defn
+async def theme_design_activity(
+    research: ResearchOutput,
+    advertising: AdvertisingOutput,
+) -> StoreTheme:
+    """Generate a product-appropriate color palette + typography pair.
+
+    Uses the configured LLM provider (Claude/Portkey/Gemini via `_llm_json`).
+    Any field that's missing or invalid falls back to the StoreTheme defaults,
+    so the storefront layout cannot break even if the model returns garbage.
+    """
+    defaults = StoreTheme()
+    prompt = f"""
+You are a brand designer picking a color palette and font pair for a single-product
+e-commerce storefront. The palette must be readable and accessible.
+
+Product: {advertising.product_name}
+Category: {research.category}
+Tagline: {advertising.tagline}
+
+Return ONLY JSON with these exact keys (no commentary, no markdown):
+{{
+  "primary": "#RRGGBB",        // main brand accent (CTAs, eyebrow, checkmarks); should fit the product mood
+  "accent": "#RRGGBB",         // slightly darker variant of primary for hover/secondary
+  "bg": "#RRGGBB",             // page background; usually a near-white tinted toward the brand
+  "surface": "#RRGGBB",        // card/panel background; usually pure white or near-white
+  "text": "#RRGGBB",           // primary text; near-black with strong contrast on bg
+  "text_muted": "#RRGGBB",     // secondary text; mid-gray with adequate contrast on bg
+  "border": "#RRGGBB",         // subtle dividers; light gray tinted toward primary
+  "font_pair": "serif-elegant" // ONE OF: "serif-elegant" | "sans-modern" | "mono-tech"
+}}
+
+Guidance:
+- Wellness/skincare/spa → soft, calming pastels and serif-elegant.
+- Tech/gadgets/peripherals → cool blues/teals/grays and sans-modern or mono-tech.
+- Home/kitchen/lifestyle → warm earth tones and serif-elegant or sans-modern.
+- Fitness/sports/recovery → bold, energetic colors and sans-modern.
+"""
+    generated = await _llm_json(prompt, ignore_fixture_flag=True)
+    if not isinstance(generated, dict):
+        return defaults
+
+    font_pair = generated.get("font_pair")
+    if font_pair not in _ALLOWED_FONT_PAIRS:
+        font_pair = defaults.font_pair
+
+    return StoreTheme(
+        primary=_safe_hex(generated.get("primary"), defaults.primary),
+        accent=_safe_hex(generated.get("accent"), defaults.accent),
+        bg=_safe_hex(generated.get("bg"), defaults.bg),
+        surface=_safe_hex(generated.get("surface"), defaults.surface),
+        text=_safe_hex(generated.get("text"), defaults.text),
+        text_muted=_safe_hex(generated.get("text_muted"), defaults.text_muted),
+        border=_safe_hex(generated.get("border"), defaults.border),
+        font_pair=font_pair,
+    )
+
+
 @activity.defn
 async def score_launch_activity(research: ResearchOutput, buyer: BuyerOutput, risk: RiskOutput) -> LaunchScoreOutput:
     launch_score = (
@@ -745,9 +908,16 @@ async def create_store_activity(
     workflow_input: WorkflowInput,
     advertising: AdvertisingOutput,
     buyer: BuyerOutput,
+    research: ResearchOutput | None = None,
+    theme: StoreTheme | None = None,
 ) -> StoreOutput:
     slug = slugify_product(workflow_input.product_name)
     retail_price = round(max(buyer.unit_cost / max(0.2, 1 - buyer.estimated_margin), 19.99), 2)
+    # Prefer a real product photo from Nimble shopping results when available;
+    # fall back to the LLM-suggested hero (which is typically a placeholder).
+    hero = advertising.hero_image_url
+    if research is not None and research.product_images:
+        hero = research.product_images[0]
     return StoreOutput(
         store_id=uuid4(),
         slug=slug,
@@ -756,7 +926,7 @@ async def create_store_activity(
         tagline=advertising.tagline,
         description=advertising.description,
         price=retail_price,
-        hero_image_url=advertising.hero_image_url,
+        hero_image_url=hero,
         supplier=buyer.supplier_name,
         cta_text=advertising.cta_text,
         features=advertising.features,
@@ -765,6 +935,7 @@ async def create_store_activity(
         faq=advertising.faq,
         reviews=advertising.reviews,
         shipping_note=advertising.shipping_note or f"Ships in {buyer.shipping_days} days",
+        theme=theme,
     )
 
 
@@ -937,6 +1108,11 @@ async def execute_fixture_launch(workflow_input: WorkflowInput) -> WorkflowResul
         lambda: advertising_activity(research, buyer, risk),
         input_summary=workflow_input.product_name,
     )
+    theme = await _timed_decision(
+        workflow_input.run_id, AgentName.theme_design, "design_theme",
+        lambda: theme_design_activity(research, advertising),
+        input_summary=f"product={advertising.product_name} category={research.category}",
+    )
     score = await _timed_decision(
         workflow_input.run_id, AgentName.score_launch, "score_launch",
         lambda: score_launch_activity(research, buyer, risk),
@@ -944,7 +1120,7 @@ async def execute_fixture_launch(workflow_input: WorkflowInput) -> WorkflowResul
     )
     store = await _timed_decision(
         workflow_input.run_id, AgentName.store_creator, "create_store",
-        lambda: create_store_activity(workflow_input, advertising, buyer),
+        lambda: create_store_activity(workflow_input, advertising, buyer, research, theme),
         input_summary=workflow_input.product_name,
     )
 
@@ -994,6 +1170,7 @@ _RUNNING_MESSAGES: dict[AgentName, str] = {
     AgentName.buyer: "Negotiating with suppliers and checking margins...",
     AgentName.legal_risk: "Reviewing compliance and risk exposure...",
     AgentName.advertising: "Drafting storefront copy and hero creative...",
+    AgentName.theme_design: "Picking a palette that fits the product...",
     AgentName.score_launch: "Calculating final launch score...",
     AgentName.store_creator: "Provisioning storefront and DNS...",
 }
@@ -1099,6 +1276,22 @@ async def execute_streaming_launch(
         ),
     )
 
+    theme = await _step(
+        AgentName.theme_design,
+        lambda: theme_design_activity(research, advertising),
+        action="design_theme",
+        input_summary=f"product={advertising.product_name} category={research.category}",
+    )
+    await _emit(
+        on_event,
+        make_event(
+            AgentName.theme_design,
+            EventType.completed,
+            f"Theme designed: {theme.primary} / {theme.font_pair}",
+            {"primary": theme.primary, "font_pair": theme.font_pair},
+        ),
+    )
+
     score = await _step(
         AgentName.score_launch,
         lambda: score_launch_activity(research, buyer, risk),
@@ -1117,7 +1310,7 @@ async def execute_streaming_launch(
 
     store = await _step(
         AgentName.store_creator,
-        lambda: create_store_activity(workflow_input, advertising, buyer),
+        lambda: create_store_activity(workflow_input, advertising, buyer, research, theme),
         action="create_store",
         input_summary=workflow_input.product_name,
     )
