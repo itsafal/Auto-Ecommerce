@@ -182,165 +182,20 @@ export type LLMConfig = {
   keys_set: { anthropic: boolean; portkey: boolean; gemini: boolean };
 };
 
-export type TopSource = { source: string; share: number };
-
-export type Business = {
-  run_id: string;
-  batch_id: string | null;
-  batch_slot: number | null;
-  attempt_index: number;
-  slug: string;
-  product_name: string;
-  store_url: string | null;
-  launch_score: number | null;
-  decision: string;
-  status: string;
-  business_status: string;
-  launched_at: string | null;
-  shutdown_at: string | null;
-  shutdown_reason: string;
-  days_live: number | null;
-  views_total: number;
-  views_24h: number;
-  revenue_total: number;
-  revenue_24h: number;
-  conversion_rate: number;
-  bounce_rate: number;
-  top_sources: TopSource[];
+const mockLLMConfig: LLMConfig = {
+  provider: "auto",
+  auto_chain_winner: "fixture",
+  anthropic_model: "claude-haiku-4-5",
+  gemini_model: "gemini-2.5-flash-lite",
+  portkey_model: "@vertexai/gemini-3.5-flash",
+  keys_set: { anthropic: false, portkey: false, gemini: false }
 };
-
-export type BusinessSummary = {
-  live_count: number;
-  max_concurrent_live: number;
-  total_launched: number;
-  total_revenue: number;
-  total_views_24h: number;
-  hit_rate: number;
-  threshold: number;
-};
-
-export type BusinessesResponse = {
-  data_source: "synthetic";
-  summary: BusinessSummary;
-  businesses: Business[];
-};
-
-export type BacklogItem = {
-  product_name: string;
-  category: string;
-  source: string;
-  trend_score: number;
-  detected_at: string;
-};
-
-export type BacklogResponse = {
-  items: BacklogItem[];
-  live_count: number;
-  max_concurrent_live: number;
-};
-
-export async function getBusinesses(params?: {
-  status?: "live" | "shutdown" | "all";
-  sort?: "launched_at" | "score" | "revenue" | "views" | "days_live";
-}): Promise<BusinessesResponse> {
-  if (useMockMode()) {
-    return {
-      data_source: "synthetic",
-      summary: {
-        live_count: 2,
-        max_concurrent_live: 5,
-        total_launched: 3,
-        total_revenue: 1234.56,
-        total_views_24h: 480,
-        hit_rate: 0.66,
-        threshold: 0.65
-      },
-      businesses: []
-    };
-  }
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set("status", params.status);
-  if (params?.sort) qs.set("sort", params.sort);
-  const query = qs.toString() ? `?${qs.toString()}` : "";
-  const response = await fetch(`${apiBaseUrl()}/api/businesses${query}`);
-  if (!response.ok) throw new Error("Failed to load businesses");
-  return response.json();
-}
-
-export async function shutdownBusiness(slug: string): Promise<Business> {
-  if (useMockMode()) {
-    throw new Error("Shutdown disabled in mock mode");
-  }
-  const response = await fetch(`${apiBaseUrl()}/api/businesses/${encodeURIComponent(slug)}/shutdown`, {
-    method: "POST"
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.detail ?? "Failed to shut down business");
-  }
-  return response.json();
-}
-
-export async function getBacklog(limit = 10): Promise<BacklogResponse> {
-  if (useMockMode()) {
-    return { items: [], live_count: 0, max_concurrent_live: 5 };
-  }
-  const response = await fetch(`${apiBaseUrl()}/api/businesses/backlog?limit=${limit}`);
-  if (!response.ok) throw new Error("Failed to load backlog");
-  return response.json();
-}
-
-export async function triggerBatch(payload: {
-  count: number;
-  threshold?: number;
-  products?: string[];
-}): Promise<BatchTriggerResponse> {
-  if (useMockMode()) {
-    // Mock: a synthetic batch with N slots already approved.
-    return {
-      batch_id: "mock-batch-0001",
-      target_count: payload.count,
-      threshold: payload.threshold ?? 0.65,
-      slots: Array.from({ length: payload.count }).map((_, i) => ({
-        slot: i,
-        run_id: `${mockRunId}-${i}`,
-        product_name: ["Magnetic Phone Mount", "Ergo Keyboard", "Portable Blender", "Mini Projector", "Smart Ring"][i] ?? `Mock Product ${i}`
-      }))
-    };
-  }
-  const response = await fetch(`${apiBaseUrl()}/api/batch/launch`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(payload)
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.detail ?? "Failed to start batch");
-  }
-  return response.json();
-}
-
-export async function getBatch(batchId: string): Promise<BatchStatusResponse> {
-  if (useMockMode()) {
-    return {
-      batch_id: batchId,
-      target_count: 3,
-      threshold: 0.65,
-      runs: [
-        { ...mockRun, batch_id: batchId, batch_slot: 0, attempt_index: 1 } as BatchRun,
-        { ...mockRun, run_id: `${mockRunId}-1`, batch_id: batchId, batch_slot: 1, attempt_index: 1, store_url: "http://ergokeyboard.localhost:3000" } as BatchRun,
-        { ...mockRun, run_id: `${mockRunId}-2`, batch_id: batchId, batch_slot: 2, attempt_index: 1, store_url: "http://portableblender.localhost:3000" } as BatchRun
-      ]
-    };
-  }
-  const response = await fetch(`${apiBaseUrl()}/api/batch/${batchId}`);
-  if (!response.ok) {
-    throw new Error("Failed to load batch status");
-  }
-  return response.json();
-}
 
 export async function getLLMConfig(): Promise<LLMConfig> {
+  if (useMockMode()) {
+    return mockLLMConfig;
+  }
+
   const response = await fetch(`${apiBaseUrl()}/api/admin/llm`);
   if (!response.ok) {
     throw new Error("Failed to load LLM config");
@@ -351,6 +206,10 @@ export async function getLLMConfig(): Promise<LLMConfig> {
 export async function updateLLMConfig(
   patch: Partial<Pick<LLMConfig, "provider" | "anthropic_model" | "gemini_model" | "portkey_model">>
 ): Promise<LLMConfig> {
+  if (useMockMode()) {
+    return { ...mockLLMConfig, ...patch };
+  }
+
   const response = await fetch(`${apiBaseUrl()}/api/admin/llm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -7,27 +7,36 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard"
 }));
 
+async function renderDashboard() {
+  render(<DashboardPage />);
+  await screen.findByText("Agent Model");
+}
+
 describe("DashboardPage", () => {
-  it("renders the autonomous deploy button (no human product selection)", () => {
-    render(<DashboardPage />);
-    // Manual single-product trigger was removed; only the autonomous
-    // batch deploy button should be present.
-    expect(
-      screen.getByRole("button", { name: /deploy autonomous batch/i })
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /trigger agent run/i })).toBeNull();
+  it("renders trigger button", async () => {
+    await renderDashboard();
+    expect(screen.getByRole("button", { name: /trigger agent run/i })).toBeInTheDocument();
   });
 
-  it("renders the operator console banner + nav tabs", () => {
-    render(<DashboardPage />);
-    expect(screen.getByText(/AUTO-ECOMMERCE/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /businesses/i })).toBeInTheDocument();
+  it("clicking trigger creates visible run_id in mock mode", async () => {
+    const user = userEvent.setup();
+    await renderDashboard();
+
+    await user.click(screen.getByRole("button", { name: /trigger agent run/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("7c0b5571-2f44-40ef-8c3f-3efca9b7e11f")).toBeInTheDocument();
+    });
+    expect(screen.getByText("https://magneticmount.fastaisolution.com")).toBeInTheDocument();
   });
 
-  it("agent timeline renders all six pipeline steps in their pending state", () => {
-    render(<DashboardPage />);
-    expect(screen.getByText("Research")).toBeInTheDocument();
+  it("agent timeline renders all five steps", async () => {
+    const user = userEvent.setup();
+    await renderDashboard();
+
+    await user.click(screen.getByRole("button", { name: /trigger agent run/i }));
+
+    expect(await screen.findByText("Research")).toBeInTheDocument();
     expect(screen.getByText("Buyer")).toBeInTheDocument();
     expect(screen.getByText("Legal / Risk")).toBeInTheDocument();
     expect(screen.getByText("Advertising")).toBeInTheDocument();
@@ -35,8 +44,9 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Store Creator")).toBeInTheDocument();
   });
 
-  it("launch score panel renders all score components", () => {
-    render(<DashboardPage />);
+  it("launch score renders all score components", async () => {
+    await renderDashboard();
+
     expect(screen.getByText("Trend score")).toBeInTheDocument();
     expect(screen.getByText("Margin score")).toBeInTheDocument();
     expect(screen.getByText("Supplier confidence")).toBeInTheDocument();
