@@ -6,13 +6,25 @@ import styles from "./BatchPanel.module.css";
 
 type SlotStatus = "pending" | "running" | "approved" | "rejected";
 
+/** Plan 04: a slot only shows "rejected" when the safety cap was hit
+ *  (errors starting with "exhausted_" or "trending_pool_exhausted"). A
+ *  terminal-but-not-approved attempt mid-slot is just the inter-product
+ *  swap — the slot is still working, so we report "running". */
+function isExhaustionError(err: string | null | undefined): boolean {
+  if (!err) return false;
+  return err.startsWith("exhausted_") || err.startsWith("trending_pool_exhausted");
+}
+
 function slotStatus(run: BatchRun | undefined, threshold: number): SlotStatus {
   if (!run) return "pending";
   const terminal = ["completed", "failed", "fallback_completed"].includes(run.status);
   if (!terminal) return "running";
   const approved =
     run.launch_score != null && run.launch_score >= threshold && run.decision === "launch";
-  return approved ? "approved" : "rejected";
+  if (approved) return "approved";
+  // Terminal and not approved → only "rejected" if the safety cap fired.
+  // Otherwise the slot is between products and will spin up another pipeline.
+  return isExhaustionError(run.error) ? "rejected" : "running";
 }
 
 /** Group the flat list of runs by slot, keeping only the most recent attempt per slot. */
@@ -51,9 +63,18 @@ function pickFocusRunId(batch: BatchStatusResponse | null): string | null {
 }
 
 type BatchPanelProps = {
-  /** Notified whenever the "currently most interesting" slot's run_id changes,
-   *  so the parent dashboard can wire its live agent panels to the active slot. */
+  /** Notified whenever the focused slot's run_id changes — either because the
+   *  auto-picker landed on a new "most interesting" slot, or because the user
+   *  manually clicked a slot card. The dashboard wires this to its agent
+   *  pipeline, event feed, and launch score panels. */
   onActiveRunChange?: (runId: string | null) => void;
+  /** Notified on every batch poll so the dashboard can render the batch
+   *  timeline (live + failed slot outcomes). */
+  onBatchChange?: (batch: BatchStatusResponse | null) => void;
+  /** Externally-controlled focus override (e.g. user clicked a timeline row).
+   *  When set, this run is highlighted as the active slot regardless of the
+   *  auto-picker. */
+  selectedRunId?: string | null;
 };
 
 /** localStorage key that persists the active batch_id across page navigations
@@ -79,12 +100,33 @@ function writeStoredBatchId(id: string | null): void {
   }
 }
 
-export function BatchPanel({ onActiveRunChange }: BatchPanelProps = {}) {
+export function BatchPanel({
+  onActiveRunChange,
+  onBatchChange,
+  selectedRunId,
+}: BatchPanelProps = {}) {
   const [batch, setBatch] = useState<BatchStatusResponse | null>(null);
   const [isTriggering, setIsTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollTimerRef = useRef<number | null>(null);
   const lastFocusRef = useRef<string | null>(null);
+  // Manual slot selection (set by clicking a slot card). When non-null, this
+  // wins over the auto-picker so the user's choice persists across polls.
+  const [manualRunId, setManualRunId] = useState<string | null>(null);
+
+  // Push batch updates upstream for the dashboard's BatchTimeline.
+  useEffect(() => {
+    onBatchChange?.(batch);
+  }, [batch, onBatchChange]);
+
+  // If the dashboard externally sets a selectedRunId (e.g. user clicked a
+  // timeline row), adopt it as the manual selection.
+  useEffect(() => {
+    if (selectedRunId !== undefined && selectedRunId !== manualRunId) {
+      setManualRunId(selectedRunId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRunId]);
 
   // On mount, restore the last active batch_id (if any) so navigation to
   // /businesses and back keeps the in-progress slot cards visible instead of
@@ -107,14 +149,28 @@ export function BatchPanel({ onActiveRunChange }: BatchPanelProps = {}) {
     };
   }, []);
 
-  // Whenever the batch state changes, notify the parent of the active runId.
-  useEffect(() => {
-    const focus = pickFocusRunId(batch);
-    if (focus !== lastFocusRef.current) {
-      lastFocusRef.current = focus;
-      onActiveRunChange?.(focus);
+  // Manual selection wins over the auto-picker. Validate the manualRunId is
+  // still present in the current batch; if a stale id (from a prior batch)
+  // is supplied, fall through to the auto-picker.
+  const focusRunId = useMemo(() => {
+    if (manualRunId && batch?.runs.some((r) => String(r.run_id) === manualRunId)) {
+      return manualRunId;
     }
-  }, [batch, onActiveRunChange]);
+    return pickFocusRunId(batch);
+  }, [batch, manualRunId]);
+
+  useEffect(() => {
+    if (focusRunId !== lastFocusRef.current) {
+      lastFocusRef.current = focusRunId;
+      onActiveRunChange?.(focusRunId);
+    }
+  }, [focusRunId, onActiveRunChange]);
+
+  // When a new batch starts (id changes), drop the manual selection so the
+  // auto-picker takes over from scratch.
+  useEffect(() => {
+    setManualRunId(null);
+  }, [batch?.batch_id]);
 
   // Poll the batch while at least one slot is still running.
   useEffect(() => {
@@ -210,7 +266,7 @@ export function BatchPanel({ onActiveRunChange }: BatchPanelProps = {}) {
         <span className={styles.subtitle}>
           {batch
             ? `batch_id ${shortRun(batch.batch_id)} · ${approved}/${batch.target_count} approved`
-            : "5 stores · score ≥ 0.65 · no humans · dedup window 7d"}
+            : "5 stores · score ≥ 0.65 · 2 tries/product · slot keeps trying"}
         </span>
       </div>
 
@@ -234,8 +290,30 @@ export function BatchPanel({ onActiveRunChange }: BatchPanelProps = {}) {
 
       {batch && slots.length > 0 && (
         <div className={styles.grid}>
-          {slots.map(({ slot, run, status }) => (
-            <article key={slot} className={styles.slot} data-status={status}>
+          {slots.map(({ slot, run, status }) => {
+            const slotRunId = run ? String(run.run_id) : null;
+            const isSelected = slotRunId !== null && slotRunId === focusRunId;
+            const clickable = slotRunId !== null;
+            return (
+            <article
+              key={slot}
+              className={styles.slot}
+              data-status={status}
+              data-selected={isSelected ? "true" : undefined}
+              data-clickable={clickable ? "true" : undefined}
+              role={clickable ? "button" : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={() => {
+                if (slotRunId) setManualRunId(slotRunId);
+              }}
+              onKeyDown={(e) => {
+                if (clickable && (e.key === "Enter" || e.key === " ")) {
+                  e.preventDefault();
+                  if (slotRunId) setManualRunId(slotRunId);
+                }
+              }}
+              title={clickable ? "Click to view this slot's score breakdown" : undefined}
+            >
               <div className={styles.slotHeader}>
                 <span className={styles.slotIndex}>SLOT {String(slot + 1).padStart(2, "0")}</span>
                 <span className={styles.statusPill} data-status={status}>
@@ -245,7 +323,10 @@ export function BatchPanel({ onActiveRunChange }: BatchPanelProps = {}) {
               <p className={styles.product}>{run?.product_name ?? "—"}</p>
               <div className={styles.meta}>
                 <span>
-                  attempt<strong>{run?.attempt_index ?? 1}</strong>
+                  try<strong>{run?.product_attempt ?? 1}</strong>
+                </span>
+                <span>
+                  product<strong>{run?.products_tried ?? 1}</strong>
                 </span>
                 <span>
                   score
@@ -262,12 +343,20 @@ export function BatchPanel({ onActiveRunChange }: BatchPanelProps = {}) {
                   {run.store_url.replace(/^https?:\/\//, "")}
                 </a>
               ) : (
-                <span className={styles.placeholder}>
-                  {status === "running" ? "running pipeline..." : status === "rejected" ? "below threshold" : "queued"}
+                <span
+                  className={styles.placeholder}
+                  title={status === "rejected" ? (run?.error ?? "safety cap reached") : undefined}
+                >
+                  {status === "running"
+                    ? "running pipeline..."
+                    : status === "rejected"
+                      ? `exhausted (${run?.products_tried ?? 0} products tried)`
+                      : "queued"}
                 </span>
               )}
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

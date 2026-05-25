@@ -1,0 +1,161 @@
+.card {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.title {
+  margin: 0 0 12px;
+  font: 11px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.empty {
+  margin: 0;
+  color: var(--text-dim, #94a3b8);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.row {
+  position: relative;
+}
+
+/* Connector line between rows (timeline rail). */
+.row::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 28px;
+  bottom: -2px;
+  width: 1px;
+  background: color-mix(in srgb, var(--border, #d7dde7) 70%, transparent);
+}
+
+.row:last-child::before {
+  display: none;
+}
+
+.rowButton {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 8px 10px 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.rowButton:hover {
+  background: color-mix(in srgb, var(--accent, #5fd3a3) 6%, transparent);
+}
+
+.rowButton[data-selected="true"] {
+  background: color-mix(in srgb, var(--accent, #5fd3a3) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent, #5fd3a3) 40%, var(--border, #d7dde7));
+}
+
+.marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--surface-2, #1a2030);
+  border: 1px solid var(--border, #2a3344);
+  z-index: 1;
+}
+
+.marker[data-kind="live"] {
+  color: var(--accent, #5fd3a3);
+  border-color: color-mix(in srgb, var(--accent, #5fd3a3) 55%, var(--border, #2a3344));
+}
+
+.marker[data-kind="failed"] {
+  color: var(--danger, #d36a6a);
+  border-color: color-mix(in srgb, var(--danger, #d36a6a) 45%, var(--border, #2a3344));
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.headRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.slotTag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-dim, #94a3b8);
+}
+
+.product {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text, #e6e9ef);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.score {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.score[data-kind="live"] {
+  color: var(--accent, #5fd3a3);
+}
+
+.score[data-kind="failed"] {
+  color: var(--danger, #d36a6a);
+}
+
+.link {
+  color: var(--accent, #5fd3a3);
+  font-size: 12px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.failedNote {
+  color: var(--text-dim, #94a3b8);
+  font-size: 12px;
+  font-style: italic;
+}

@@ -349,6 +349,10 @@ async def _build_candidate_queue(count: int, products: list[str] | None) -> asyn
     a pool that excludes anything we've researched in the last DEDUP_WINDOW_DAYS
     days. This is what makes the autonomous batch deploy never re-try a product
     it has already attempted.
+
+    Pool sizing (plan 04): count * candidate_pool_multiplier (default 4 → pool
+    of 20 for a 5-slot batch). Slots can also lazily top up the queue via
+    `_top_up_queue` when this initial pool runs dry mid-batch.
     """
     settings = get_settings()
     queue: asyncio.Queue[str] = asyncio.Queue()
@@ -358,9 +362,7 @@ async def _build_candidate_queue(count: int, products: list[str] | None) -> asyn
             await queue.put(p)
         return queue
 
-    pool_size = max(count * (settings.batch_max_attempts_per_slot + 1), count * 3)
-    # Pull the "already tried recently" set from the run_store, which prefers
-    # ClickHouse and falls back to the in-memory mirror when CH is off.
+    pool_size = max(count * settings.candidate_pool_multiplier, count)
     excluded: set[str] = set()
     if settings.dedup_window_days > 0:
         try:
@@ -369,13 +371,55 @@ async def _build_candidate_queue(count: int, products: list[str] | None) -> asyn
             excluded = set()
 
     fresh = await discover_new_trending_products(
-        limit=min(pool_size, 20),
+        limit=min(pool_size, 25),
         exclude=excluded,
     )
     for name in fresh:
         await queue.put(name)
 
     return queue
+
+
+async def _top_up_queue(
+    queue: asyncio.Queue[str],
+    *,
+    lock: asyncio.Lock,
+    already_tried: set[str],
+) -> str | None:
+    """Pull the next candidate, lazily topping up from Trend Scout if empty.
+
+    The lock guards the "queue empty → top up" critical section so two slots
+    arriving simultaneously don't both fire a discovery call and push
+    duplicates. Returns None if the trending pool is truly exhausted.
+    """
+    try:
+        return queue.get_nowait()
+    except asyncio.QueueEmpty:
+        pass
+
+    async with lock:
+        # Re-check under the lock — another slot may have already topped up.
+        try:
+            return queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+
+        settings = get_settings()
+        excluded: set[str] = set(already_tried)
+        if settings.dedup_window_days > 0:
+            try:
+                excluded |= run_store.recently_tried_products(settings.dedup_window_days)
+            except Exception:
+                pass
+
+        fresh = await discover_new_trending_products(limit=5, exclude=excluded)
+        for name in fresh:
+            await queue.put(name)
+
+        try:
+            return queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return None
 
 
 async def _run_batch_slot(
@@ -386,118 +430,186 @@ async def _run_batch_slot(
     initial_product: str,
     candidate_queue: asyncio.Queue[str],
     threshold: float,
-    max_attempts: int,
     require_auth: bool,
+    queue_lock: asyncio.Lock,
 ) -> None:
-    """Run one batch slot to completion.
+    """Run one batch slot until it lands a winner (plan 04 retry policy).
 
-    Each attempt runs the streaming pipeline so the dashboard sees live events
-    per slot. If the launch_score clears the threshold and risk is cleared the
-    slot is approved; otherwise it pops the next candidate from the queue and
-    retries, up to `max_attempts` attempts. When attempts are exhausted the
-    slot's final run is marked failed with decision=reject.
+    Outer loop iterates distinct products; inner loop is 2 attempts on the
+    same product (LLM scoring is noisy → borderline products often clear on
+    a second pass). After both attempts fail, the slot pulls a fresh product
+    (lazily topping up the candidate queue from Trend Scout when needed) and
+    repeats. Slot stops when either (a) a product lands a launch above
+    threshold or (b) `max_products_per_slot` distinct products have all
+    failed (safety cap so a degraded scorer can't loop forever).
+
+    Fast-fail: if a product scores below `fast_fail_threshold` on attempt 1,
+    skip attempt 2 — the second attempt is almost certainly hopeless and
+    burns API budget for nothing.
     """
+    settings = get_settings()
+    attempts_per_product = max(1, settings.attempts_per_product)
+    max_products = max(1, settings.max_products_per_slot)
+    fast_fail = settings.fast_fail_threshold
+
     current_run_id = initial_run_id
     current_product = initial_product
+    tried: set[str] = set()           # products this slot has already burned through
+    products_tried = 0
+    overall_attempt = 0               # monotonic across all pipeline runs in this slot
 
-    for attempt in range(1, max_attempts + 1):
-        run = LaunchRun(
-            run_id=current_run_id,
-            temporal_workflow_id=f"launch-store-{current_run_id}",
-            product_name=current_product,
-            slug=slugify_product(current_product),
-            status=RunStatus.started,
-            batch_id=batch_id,
-            batch_slot=slot_index,
-            attempt_index=attempt,
-        )
-        run_store.upsert_run(run)
+    while products_tried < max_products:
+        products_tried += 1
 
-        workflow_input = WorkflowInput(
-            run_id=current_run_id,
-            product_name=current_product,
-            temporal_workflow_id=f"launch-store-{current_run_id}",
-        )
+        for product_attempt in range(1, attempts_per_product + 1):
+            overall_attempt += 1
+            run = LaunchRun(
+                run_id=current_run_id,
+                temporal_workflow_id=f"launch-store-{current_run_id}",
+                product_name=current_product,
+                slug=slugify_product(current_product),
+                status=RunStatus.started,
+                batch_id=batch_id,
+                batch_slot=slot_index,
+                attempt_index=overall_attempt,
+                product_attempt=product_attempt,
+                products_tried=products_tried,
+            )
+            run_store.upsert_run(run)
 
-        try:
-            delay_ms = get_settings().agent_stream_delay_ms
-            if delay_ms > 0:
-                await execute_streaming_launch(
-                    workflow_input,
-                    delay_ms=delay_ms,
-                    on_event=lambda ev, _rid=current_run_id: run_store.add_event(_rid, ev),
-                    on_progress=lambda r, _bid=batch_id, _slot=slot_index, _att=attempt: run_store.upsert_run(
-                        _enrich_run_with_batch(r, _bid, _slot, _att)
-                    ),
-                    # Persist the generated StoreOutput so GET /api/stores/{slug}
-                    # serves it when the operator clicks the subdomain URL.
-                    on_store=lambda store: run_store.upsert_store(store),
-                )
-            else:
-                result = await execute_fixture_launch(workflow_input)
-                enriched = _enrich_run_with_batch(result.run, batch_id, slot_index, attempt)
-                run_store.upsert_run(enriched)
-                run_store.set_events(current_run_id, result.events)
-                if result.store is not None:
-                    run_store.upsert_store(result.store)
-        except Exception as exc:
-            current_run = run_store.get_run(current_run_id)
-            if current_run is not None:
-                current_run.status = RunStatus.failed
-                current_run.error = str(exc)
-                current_run.attempt_index = attempt
-                run_store.upsert_run(current_run)
-            return
+            workflow_input = WorkflowInput(
+                run_id=current_run_id,
+                product_name=current_product,
+                temporal_workflow_id=f"launch-store-{current_run_id}",
+            )
 
-        final_run = run_store.get_run(current_run_id)
-        if final_run is None:
-            return
+            try:
+                delay_ms = settings.agent_stream_delay_ms
+                if delay_ms > 0:
+                    await execute_streaming_launch(
+                        workflow_input,
+                        delay_ms=delay_ms,
+                        on_event=lambda ev, _rid=current_run_id: run_store.add_event(_rid, ev),
+                        on_progress=lambda r, _bid=batch_id, _slot=slot_index, _att=overall_attempt, _pa=product_attempt, _pt=products_tried: run_store.upsert_run(
+                            _enrich_run_with_batch(r, _bid, _slot, _att, _pa, _pt)
+                        ),
+                        on_store=lambda store: run_store.upsert_store(store),
+                    )
+                else:
+                    result = await execute_fixture_launch(workflow_input)
+                    enriched = _enrich_run_with_batch(
+                        result.run, batch_id, slot_index, overall_attempt,
+                        product_attempt, products_tried,
+                    )
+                    run_store.upsert_run(enriched)
+                    run_store.set_events(current_run_id, result.events)
+                    if result.store is not None:
+                        run_store.upsert_store(result.store)
+            except Exception as exc:
+                current_run = run_store.get_run(current_run_id)
+                if current_run is not None:
+                    current_run.status = RunStatus.failed
+                    current_run.error = str(exc)
+                    current_run.attempt_index = overall_attempt
+                    current_run.product_attempt = product_attempt
+                    current_run.products_tried = products_tried
+                    run_store.upsert_run(current_run)
+                # Hard exception — abandon this product, try a fresh one.
+                break
 
-        # Force the batch fields back on (the workflow result loses them when
-        # build_launch_result rebuilds the LaunchRun model).
-        final_run.batch_id = batch_id
-        final_run.batch_slot = slot_index
-        final_run.attempt_index = attempt
-        run_store.upsert_run(final_run)
+            final_run = run_store.get_run(current_run_id)
+            if final_run is None:
+                return
 
-        passed = (
-            final_run.launch_score is not None
-            and final_run.launch_score >= threshold
-            and final_run.decision == Decision.launch
-        )
-
-        if passed:
-            # Promote this run to a live business so it appears in the
-            # /businesses portfolio and the lifecycle counters.
-            from datetime import datetime, timezone
-
-            final_run.business_status = "live"
-            final_run.launched_at = datetime.now(timezone.utc)
+            # Workflow rebuilds the model without batch fields; restamp them.
+            final_run.batch_id = batch_id
+            final_run.batch_slot = slot_index
+            final_run.attempt_index = overall_attempt
+            final_run.product_attempt = product_attempt
+            final_run.products_tried = products_tried
             run_store.upsert_run(final_run)
+
+            score = final_run.launch_score
+            passed = (
+                score is not None
+                and score >= threshold
+                and final_run.decision == Decision.launch
+            )
+
+            if passed:
+                from datetime import datetime, timezone
+
+                final_run.business_status = "live"
+                final_run.launched_at = datetime.now(timezone.utc)
+                run_store.upsert_run(final_run)
+                return
+
+            # Mark this attempt as a reject.
+            final_run.decision = Decision.reject
+            run_store.upsert_run(final_run)
+
+            # Fast-fail: hopeless score → don't burn attempt 2 on the same product.
+            if score is not None and score < fast_fail:
+                break
+
+            # Still inside the per-product budget? Try again with same product.
+            if product_attempt < attempts_per_product:
+                current_run_id = uuid4()
+
+        # Product fully exhausted (no pass after `attempts_per_product` tries
+        # or fast-fail). Mark this product as tried and pull a fresh one.
+        tried.add(current_product.strip().lower())
+
+        if products_tried >= max_products:
+            break
+
+        next_product = await _top_up_queue(
+            candidate_queue, lock=queue_lock, already_tried=tried,
+        )
+        if next_product is None:
+            # Trending pool truly exhausted — give up gracefully.
+            _mark_slot_exhausted(
+                slot_index=slot_index, batch_id=batch_id,
+                last_run_id=current_run_id, products_tried=products_tried,
+                reason="trending_pool_exhausted",
+            )
             return
 
-        # Score below threshold — reject this attempt, pull the next product.
-        final_run.decision = Decision.reject
-        run_store.upsert_run(final_run)
-
-        if attempt >= max_attempts:
-            return
-
-        # Pull the next candidate; if the queue is empty we exhaust the slot.
-        try:
-            current_product = candidate_queue.get_nowait()
-        except asyncio.QueueEmpty:
-            return
+        current_product = next_product
         current_run_id = uuid4()
+
+    # Hit the safety cap without landing a winner.
+    _mark_slot_exhausted(
+        slot_index=slot_index, batch_id=batch_id,
+        last_run_id=current_run_id, products_tried=products_tried,
+        reason=f"exhausted_after_{products_tried}_products",
+    )
+
+
+def _mark_slot_exhausted(
+    *, slot_index: int, batch_id: UUID, last_run_id: UUID,
+    products_tried: int, reason: str,
+) -> None:
+    """Stamp a terminal 'safety cap hit' marker on the slot's last run."""
+    run = run_store.get_run(last_run_id)
+    if run is None:
+        return
+    run.status = RunStatus.failed
+    run.error = reason
+    run.products_tried = products_tried
+    run_store.upsert_run(run)
 
 
 def _enrich_run_with_batch(
-    run: LaunchRun, batch_id: UUID, slot_index: int, attempt: int
+    run: LaunchRun, batch_id: UUID, slot_index: int, attempt: int,
+    product_attempt: int = 1, products_tried: int = 1,
 ) -> LaunchRun:
     """Stamp batch metadata onto a LaunchRun returned from the workflow."""
     run.batch_id = batch_id
     run.batch_slot = slot_index
     run.attempt_index = attempt
+    run.product_attempt = product_attempt
+    run.products_tried = products_tried
     return run
 
 
@@ -531,6 +643,8 @@ async def trigger_batch(
             seeded_products.append("Magnetic Phone Mount")
 
     batch_id = uuid4()
+    # Shared lock so two slots hitting an empty queue don't both top up.
+    queue_lock = asyncio.Lock()
     slots: list[BatchSlotSummary] = []
     for slot_index, product in enumerate(seeded_products):
         run_id = uuid4()
@@ -545,8 +659,8 @@ async def trigger_batch(
                 initial_product=product,
                 candidate_queue=candidate_queue,
                 threshold=threshold,
-                max_attempts=settings.batch_max_attempts_per_slot,
                 require_auth=settings.require_auth_for_runs,
+                queue_lock=queue_lock,
             )
         )
 

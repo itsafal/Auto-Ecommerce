@@ -162,6 +162,21 @@
   border-left-color: var(--accent-2, #e5a657);
 }
 
+.slot[data-clickable="true"] {
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+}
+
+.slot[data-clickable="true"]:hover {
+  background: color-mix(in srgb, var(--accent, #0f766e) 8%, var(--surface-2, #f8fafc));
+}
+
+.slot[data-selected="true"] {
+  outline: 2px solid var(--accent, #0f766e);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent, #0f766e) 12%, var(--surface-2, #f8fafc));
+}
+
 .slotHeader {
   display: flex;
   justify-content: space-between;
