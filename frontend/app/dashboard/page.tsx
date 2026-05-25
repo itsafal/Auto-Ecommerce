@@ -6,9 +6,16 @@ import { AgentFeed } from "@/components/AgentFeed";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { AppNav } from "@/components/AppNav";
 import { BatchPanel } from "@/components/BatchPanel";
+import { BatchTimeline } from "@/components/BatchTimeline";
 import { LaunchScore } from "@/components/LaunchScore";
 import { ModelPicker } from "@/components/ModelPicker";
-import { getCurrentUser, getRun, getRunEvents, useMockMode } from "@/lib/api";
+import {
+  type BatchStatusResponse,
+  getCurrentUser,
+  getRun,
+  getRunEvents,
+  useMockMode,
+} from "@/lib/api";
 import { type AgentEvent, type LaunchRun, mockEvents, mockRun, mockScore } from "@/lib/mock-data";
 import styles from "./page.module.css";
 
@@ -34,6 +41,10 @@ export default function DashboardPage() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSessionReady, setIsSessionReady] = useState(useMockMode);
+  // Latest batch snapshot (forwarded from BatchPanel) — drives the timeline.
+  const [batch, setBatch] = useState<BatchStatusResponse | null>(null);
+  // User-clicked focus override (from a slot card or timeline row).
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const score = useMemo(() => {
     if (!run && events.length === 0) {
@@ -179,7 +190,11 @@ export default function DashboardPage() {
         <ModelPicker />
       </section>
 
-      <BatchPanel onActiveRunChange={setRunId} />
+      <BatchPanel
+        onActiveRunChange={setRunId}
+        onBatchChange={setBatch}
+        selectedRunId={selectedRunId}
+      />
 
       {error ? <p className={styles.error}>{error}</p> : null}
 
@@ -215,14 +230,11 @@ export default function DashboardPage() {
         </div>
         <aside className={styles.secondary}>
           <LaunchScore score={score} />
-          <section className={styles.finalUrl}>
-            <h2>FINAL STORE URL</h2>
-            {runId && run?.store_url ? (
-              <a href={run.store_url}>{run.store_url}</a>
-            ) : (
-              <p>{runId ? "Provisioning storefront..." : "No store yet — trigger a run."}</p>
-            )}
-          </section>
+          <BatchTimeline
+            batch={batch}
+            selectedRunId={runId}
+            onSelectRun={setSelectedRunId}
+          />
         </aside>
       </div>
     </main>

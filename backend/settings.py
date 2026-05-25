@@ -41,7 +41,19 @@ class Settings:
     # Batch deployment defaults — operator can override per request.
     launch_score_threshold: float = 0.65
     batch_target_count: int = 5
+    # DEPRECATED (plan 04): superseded by attempts_per_product + max_products_per_slot.
+    # Kept so old env vars don't crash; ignored by the new retry loop.
     batch_max_attempts_per_slot: int = 5
+    # New per-slot retry policy (plan 04):
+    #   - Each product gets `attempts_per_product` chances (LLM-noise retries).
+    #   - On full failure, swap to a new product. Slot keeps trying until a
+    #     winner lands or `max_products_per_slot` distinct products fail.
+    #   - If attempt 1 scores below `fast_fail_threshold`, skip attempt 2.
+    #   - Initial candidate pool size = count * candidate_pool_multiplier.
+    attempts_per_product: int = 2
+    max_products_per_slot: int = 10
+    candidate_pool_multiplier: int = 4
+    fast_fail_threshold: float = 0.40
     # Dedup window: never re-attempt a product researched in the last N days.
     # Set to 0 to disable dedup (e.g. for testing or demos that re-use products).
     dedup_window_days: int = 7
@@ -76,6 +88,10 @@ def get_settings() -> Settings:
         launch_score_threshold=float(os.getenv("LAUNCH_SCORE_THRESHOLD", "0.65")),
         batch_target_count=int(os.getenv("BATCH_TARGET_COUNT", "5")),
         batch_max_attempts_per_slot=int(os.getenv("BATCH_MAX_ATTEMPTS_PER_SLOT", "5")),
+        attempts_per_product=int(os.getenv("ATTEMPTS_PER_PRODUCT", "2")),
+        max_products_per_slot=int(os.getenv("MAX_PRODUCTS_PER_SLOT", "10")),
+        candidate_pool_multiplier=int(os.getenv("CANDIDATE_POOL_MULTIPLIER", "4")),
+        fast_fail_threshold=float(os.getenv("FAST_FAIL_THRESHOLD", "0.40")),
         dedup_window_days=int(os.getenv("DEDUP_WINDOW_DAYS", "7")),
         max_concurrent_live=int(os.getenv("MAX_CONCURRENT_LIVE", "5")),
         nimble_api_key=os.getenv("NIMBLE_API_KEY", ""),

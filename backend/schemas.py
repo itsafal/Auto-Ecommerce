@@ -216,7 +216,9 @@ class LaunchRun(BaseModel):
     # Batch deployment fields — present when this run was part of a batch.
     batch_id: UUID | None = None
     batch_slot: int | None = None      # 0-indexed slot position in the batch
-    attempt_index: int = 1             # which attempt within the slot (1, 2, 3, ...)
+    attempt_index: int = 1             # Nth overall pipeline run in this slot (1, 2, 3, ...)
+    product_attempt: int = 1           # 1 or 2 — which retry on the CURRENT product (plan 04)
+    products_tried: int = 1            # how many distinct products this slot has tried (plan 04)
     # Businesses portfolio lifecycle (Phase D).
     business_status: str = ""          # '' | 'live' | 'shutdown' | 'archived'
     launched_at: datetime | None = None

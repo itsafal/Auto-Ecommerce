@@ -32,6 +32,8 @@ export type BatchRun = LaunchRun & {
   batch_id: string | null;
   batch_slot: number | null;
   attempt_index: number;
+  product_attempt?: number;   // plan 04: 1 or 2 — which retry on the current product
+  products_tried?: number;    // plan 04: how many distinct products this slot has tried
 };
 
 export type BatchStatusResponse = {
@@ -39,6 +41,63 @@ export type BatchStatusResponse = {
   target_count: number;
   threshold: number;
   runs: BatchRun[];
+};
+
+export type TopSource = { source: string; share: number };
+
+export type Business = {
+  run_id: string;
+  batch_id: string | null;
+  batch_slot: number | null;
+  attempt_index: number;
+  slug: string;
+  product_name: string;
+  store_url: string | null;
+  launch_score: number | null;
+  decision: string;
+  status: string;
+  business_status: "" | "live" | "shutdown" | "archived";
+  launched_at: string | null;
+  shutdown_at: string | null;
+  shutdown_reason: string;
+  days_live: number | null;
+  views_total: number;
+  views_24h: number;
+  revenue_total: number;
+  revenue_24h: number;
+  conversion_rate: number;
+  bounce_rate: number;
+  top_sources: TopSource[];
+};
+
+export type BusinessSummary = {
+  live_count: number;
+  max_concurrent_live: number;
+  total_launched: number;
+  total_revenue: number;
+  total_views_24h: number;
+  hit_rate: number;
+  threshold: number;
+};
+
+export type BusinessesResponse = {
+  data_source: "synthetic";
+  summary: BusinessSummary;
+  businesses: Business[];
+};
+
+export type BacklogItem = {
+  product_name: string;
+  category: string;
+  source: string;
+  trend_score: number;
+  detected_at: string;
+};
+
+export type BacklogResponse = {
+  items: BacklogItem[];
+  live_count: number;
+  max_concurrent_live: number;
 };
 
 export type AuthUser = {
@@ -190,6 +249,116 @@ const mockLLMConfig: LLMConfig = {
   portkey_model: "@vertexai/gemini-3.5-flash",
   keys_set: { anthropic: false, portkey: false, gemini: false }
 };
+
+export async function triggerBatch(
+  body: { count?: number; threshold?: number; products?: string[] } = {}
+): Promise<BatchTriggerResponse> {
+  if (useMockMode()) {
+    const target = body.count ?? 5;
+    return {
+      batch_id: "mock-batch-0001",
+      target_count: target,
+      threshold: body.threshold ?? 0.65,
+      slots: Array.from({ length: target }, (_, i) => ({
+        slot: i,
+        run_id: `${mockRunId.slice(0, 8)}-slot${i}`,
+        product_name: `Mock Product ${i + 1}`
+      }))
+    };
+  }
+
+  const response = await fetch(`${apiBaseUrl()}/api/batch/launch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? "Failed to start batch");
+  }
+  return response.json();
+}
+
+export async function getBatch(batchId: string): Promise<BatchStatusResponse> {
+  if (useMockMode()) {
+    return {
+      batch_id: batchId,
+      target_count: 5,
+      threshold: 0.65,
+      runs: []
+    };
+  }
+
+  const response = await fetch(`${apiBaseUrl()}/api/batch/${batchId}`, {
+    headers: authHeaders()
+  });
+  if (!response.ok) {
+    throw new Error("Failed to load batch");
+  }
+  return response.json();
+}
+
+const mockSummary: BusinessSummary = {
+  live_count: 0,
+  max_concurrent_live: 5,
+  total_launched: 0,
+  total_revenue: 0,
+  total_views_24h: 0,
+  hit_rate: 0,
+  threshold: 0.65
+};
+
+export async function getBusinesses(
+  params: { status?: string; sort?: string } = {}
+): Promise<BusinessesResponse> {
+  if (useMockMode()) {
+    return { data_source: "synthetic", summary: mockSummary, businesses: [] };
+  }
+
+  const qs = new URLSearchParams();
+  if (params.status) qs.set("status", params.status);
+  if (params.sort) qs.set("sort", params.sort);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+
+  const response = await fetch(`${apiBaseUrl()}/api/businesses${suffix}`, {
+    headers: authHeaders()
+  });
+  if (!response.ok) {
+    throw new Error("Failed to load businesses");
+  }
+  return response.json();
+}
+
+export async function shutdownBusiness(slug: string): Promise<Business> {
+  if (useMockMode()) {
+    throw new Error("Shutdown not available in mock mode");
+  }
+
+  const response = await fetch(`${apiBaseUrl()}/api/businesses/${slug}/shutdown`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() }
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? "Failed to shutdown business");
+  }
+  return response.json();
+}
+
+export async function getBacklog(limit = 10): Promise<BacklogResponse> {
+  if (useMockMode()) {
+    return { items: [], live_count: 0, max_concurrent_live: 5 };
+  }
+
+  const response = await fetch(
+    `${apiBaseUrl()}/api/businesses/backlog?limit=${limit}`,
+    { headers: authHeaders() }
+  );
+  if (!response.ok) {
+    throw new Error("Failed to load backlog");
+  }
+  return response.json();
+}
 
 export async function getLLMConfig(): Promise<LLMConfig> {
   if (useMockMode()) {
