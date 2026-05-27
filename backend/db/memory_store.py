@@ -47,6 +47,8 @@ class MemoryStore:
         batch_id: str | None = None,
         batch_slot: int | None = None,
         attempt_index: int = 1,
+        product_attempt: int = 1,
+        products_tried: int = 1,
     ) -> dict[str, Any]:
         with self._lock:
             record = {
@@ -64,6 +66,8 @@ class MemoryStore:
                 "batch_id": batch_id,
                 "batch_slot": batch_slot,
                 "attempt_index": int(attempt_index or 1),
+                "product_attempt": int(product_attempt or 1),
+                "products_tried": int(products_tried or 1),
             }
             self._runs[run_id] = record
             return deepcopy(record)

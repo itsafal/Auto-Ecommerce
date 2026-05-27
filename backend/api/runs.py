@@ -32,6 +32,7 @@ from backend.workflows.activities import (
     execute_streaming_launch,
     slugify_product,
 )
+from backend.services.agent_commerce import build_agent_manifest
 
 router = APIRouter(prefix="/api", tags=["runs"])
 
@@ -248,6 +249,12 @@ async def get_store(slug: str) -> StoreOutput:
             return _store_from_run(run)
 
     raise HTTPException(status_code=404, detail="Store not found")
+
+
+@router.get("/stores/{slug}/agent-manifest")
+async def get_store_agent_manifest(slug: str) -> dict:
+    store = await get_store(slug)
+    return build_agent_manifest(store)
 
 
 _PALETTE_POOL: list[dict[str, str]] = [
@@ -618,13 +625,22 @@ async def trigger_batch(
     request: BatchTriggerRequest | None = None,
     authorization: str | None = Header(default=None),
 ) -> BatchTriggerResponse:
+    return await start_batch(request=request, authorization=authorization, enforce_auth=True)
+
+
+async def start_batch(
+    request: BatchTriggerRequest | None = None,
+    authorization: str | None = None,
+    *,
+    enforce_auth: bool = True,
+) -> BatchTriggerResponse:
     """Kick off a batch of N stores; returns immediately with the batch_id.
 
     Each slot runs its own pipeline in the background. Poll
     `GET /api/batch/{batch_id}` to see progress.
     """
     settings = get_settings()
-    if settings.require_auth_for_runs:
+    if enforce_auth and settings.require_auth_for_runs:
         get_authenticated_user(authorization)
 
     req = request or BatchTriggerRequest()

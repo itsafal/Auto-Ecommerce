@@ -50,6 +50,12 @@ class InMemoryRunStore:
         self._runs.clear()
         self._events.clear()
         self._stores.clear()
+        try:
+            client = get_client()
+            if hasattr(client, "reset"):
+                client.reset()
+        except Exception:
+            pass
 
     # ----- stores -----
 
@@ -230,8 +236,6 @@ class InMemoryRunStore:
 
         Best-effort: failures are logged but never raised.
         """
-        if not use_clickhouse():
-            return
         try:
             client = get_client()
             if not hasattr(client, "write_trend_signal"):
@@ -244,6 +248,16 @@ class InMemoryRunStore:
                 exc,
                 exc_info=True,
             )
+
+    def list_trend_signals(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return recent trend signals from the active backing store."""
+        try:
+            client = get_client()
+            if hasattr(client, "list_trend_signals"):
+                return client.list_trend_signals(limit=limit)
+        except Exception as exc:
+            logger.warning("[run_store] list_trend_signals failed: %s", exc)
+        return []
 
     # ----- ClickHouse mirror (dual-write side) -----
 
@@ -262,12 +276,16 @@ class InMemoryRunStore:
                     batch_id=str(run.batch_id) if run.batch_id else None,
                     batch_slot=run.batch_slot,
                     attempt_index=run.attempt_index,
+                    product_attempt=run.product_attempt,
+                    products_tried=run.products_tried,
                 )
             update_fields: dict[str, Any] = {
                 "status": _enum_value(run.status),
                 "launch_score": float(run.launch_score or 0.0),
                 "decision": _enum_value(run.decision) if run.decision else "",
                 "store_url": run.store_url or "",
+                "product_attempt": int(run.product_attempt or 1),
+                "products_tried": int(run.products_tried or 1),
                 "business_status": run.business_status or "",
                 "shutdown_reason": run.shutdown_reason or "",
             }
@@ -369,6 +387,8 @@ def _row_to_launch_run(row: dict[str, Any]) -> LaunchRun:
         batch_id=row.get("batch_id") or None,
         batch_slot=row.get("batch_slot") if row.get("batch_slot") is not None else None,
         attempt_index=int(row.get("attempt_index") or 1),
+        product_attempt=int(row.get("product_attempt") or 1),
+        products_tried=int(row.get("products_tried") or 1),
         business_status=row.get("business_status") or "",
         launched_at=row.get("launched_at"),
         shutdown_at=row.get("shutdown_at"),

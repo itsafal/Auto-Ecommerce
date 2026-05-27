@@ -173,6 +173,10 @@ async def shutdown_business(slug: str) -> dict[str, Any]:
 
 @router.get("/backlog")
 async def get_backlog(limit: int = 10) -> dict[str, Any]:
+    return build_backlog(limit=limit)
+
+
+def build_backlog(limit: int = 10) -> dict[str, Any]:
     """Top scoring products from trend_signals that have NOT yet been launched.
 
     The backlog is the future autonomous-loop queue: when a slot opens (a
