@@ -75,6 +75,8 @@ ORDER BY (started_at, run_id);
 ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS batch_id Nullable(UUID);
 ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS batch_slot Nullable(UInt8);
 ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS attempt_index UInt8 DEFAULT 1;
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS product_attempt UInt8 DEFAULT 1;
+ALTER TABLE launch_runs ADD COLUMN IF NOT EXISTS products_tried UInt8 DEFAULT 1;
 
 -- Businesses portfolio lifecycle (Phase D).
 -- Empty string means "not yet promoted to business" (i.e. failed/rejected run).

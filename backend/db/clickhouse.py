@@ -91,17 +91,21 @@ class ClickHouseClient:
         batch_id=None,
         batch_slot=None,
         attempt_index=1,
+        product_attempt=1,
+        products_tried=1,
     ):
         rid = uuid.UUID(run_id) if isinstance(run_id, str) else run_id
         bid = uuid.UUID(batch_id) if isinstance(batch_id, str) and batch_id else batch_id
         self._client.insert(
             "launch_runs",
             [[rid, temporal_workflow_id, product_name, slug, status, 0.0, "", "",
-              bid, batch_slot, int(attempt_index or 1)]],
+              bid, batch_slot, int(attempt_index or 1),
+              int(product_attempt or 1), int(products_tried or 1)]],
             column_names=[
                 "run_id", "temporal_workflow_id", "product_name", "slug",
                 "status", "launch_score", "decision", "store_url",
                 "batch_id", "batch_slot", "attempt_index",
+                "product_attempt", "products_tried",
             ],
         )
         return self.get_run(run_id)

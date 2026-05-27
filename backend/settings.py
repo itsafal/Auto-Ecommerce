@@ -60,6 +60,9 @@ class Settings:
     # Max concurrently live stores. Surfaced in the UI now; enforced when the
     # autonomous lifecycle loop ships (Phase E foundation only in this PR).
     max_concurrent_live: int = 5
+    lifecycle_grace_days: float = 1.0
+    lifecycle_min_revenue_24h: float = 10.0
+    lifecycle_min_conversion_rate: float = 0.005
     nimble_api_key: str = ""
     nimble_api_url: str = ""
 
@@ -94,6 +97,9 @@ def get_settings() -> Settings:
         fast_fail_threshold=float(os.getenv("FAST_FAIL_THRESHOLD", "0.40")),
         dedup_window_days=int(os.getenv("DEDUP_WINDOW_DAYS", "7")),
         max_concurrent_live=int(os.getenv("MAX_CONCURRENT_LIVE", "5")),
+        lifecycle_grace_days=float(os.getenv("LIFECYCLE_GRACE_DAYS", "1.0")),
+        lifecycle_min_revenue_24h=float(os.getenv("LIFECYCLE_MIN_REVENUE_24H", "10.0")),
+        lifecycle_min_conversion_rate=float(os.getenv("LIFECYCLE_MIN_CONVERSION_RATE", "0.005")),
         nimble_api_key=os.getenv("NIMBLE_API_KEY", ""),
         nimble_api_url=os.getenv("NIMBLE_API_URL", ""),
     )
