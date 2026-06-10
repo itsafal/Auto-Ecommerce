@@ -30,8 +30,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className={styles.shell}>
-      <section className={styles.panel}>
+    <main className={`console ${styles.shell}`}>
+      <section className={styles.panel} data-panel data-boot="1">
         <p className={styles.eyebrow}>Operator access</p>
         <h1>Log in</h1>
         <p className={styles.copy}>Use your account to open the launch dashboard.</p>

@@ -6,8 +6,16 @@ import {
   type BacklogResponse,
   type Business,
   type BusinessesResponse,
+  type CategoryStat,
+  type LifecycleTickResult,
+  type PortfolioExperiments,
+  type ShutdownCandidate,
   getBacklog,
   getBusinesses,
+  getCategoryLeaderboard,
+  getLifecycleCandidates,
+  getPortfolioExperiments,
+  runLifecycleTick,
   shutdownBusiness
 } from "@/lib/api";
 import styles from "./page.module.css";
@@ -49,22 +57,44 @@ function displayStatus(b: Business): "live" | "shutdown" | "archived" {
   return "archived";
 }
 
+function tickSummary(result: LifecycleTickResult): string {
+  const parts = [`${result.shutdowns.length} shut down`];
+  parts.push(
+    result.promotion
+      ? `promoted "${result.promotion.slots[0]?.product_name ?? "backlog item"}"`
+      : "nothing promoted"
+  );
+  parts.push(`${result.live_count}/${result.max_concurrent_live} live`);
+  return parts.join(" · ");
+}
+
 export default function BusinessesPage() {
   const [data, setData] = useState<BusinessesResponse | null>(null);
   const [backlog, setBacklog] = useState<BacklogResponse | null>(null);
+  const [candidates, setCandidates] = useState<ShutdownCandidate[]>([]);
+  const [categories, setCategories] = useState<CategoryStat[]>([]);
+  const [experiments, setExperiments] = useState<PortfolioExperiments | null>(null);
   const [filter, setFilter] = useState<FilterStatus>("all");
   const [sort, setSort] = useState<SortKey>("launched_at");
   const [error, setError] = useState<string | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
+  const [isTicking, setIsTicking] = useState(false);
+  const [tickResult, setTickResult] = useState<string | null>(null);
 
   async function refresh() {
     try {
-      const [b, bl] = await Promise.all([
+      const [b, bl, lc, cats, exp] = await Promise.all([
         getBusinesses({ status: filter, sort }),
-        getBacklog(8)
+        getBacklog(8),
+        getLifecycleCandidates(),
+        getCategoryLeaderboard(),
+        getPortfolioExperiments()
       ]);
       setData(b);
       setBacklog(bl);
+      setCandidates(lc.shutdown_candidates);
+      setCategories(cats);
+      setExperiments(exp);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load businesses");
@@ -90,6 +120,20 @@ export default function BusinessesPage() {
     }
   }
 
+  async function handleLifecycleTick() {
+    setIsTicking(true);
+    setTickResult(null);
+    try {
+      const result = await runLifecycleTick();
+      setTickResult(tickSummary(result));
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Lifecycle tick failed");
+    } finally {
+      setIsTicking(false);
+    }
+  }
+
   const visibleBusinesses = useMemo(() => {
     if (!data) return [] as Business[];
     if (filter === "all") return data.businesses;
@@ -99,9 +143,9 @@ export default function BusinessesPage() {
   const summary = data?.summary;
 
   return (
-    <main className={styles.shell}>
+    <main className={`console ${styles.shell}`}>
       <AppNav />
-      <header className={styles.header}>
+      <header className={styles.header} data-boot="1">
         <div className={styles.brandLockup}>
           <span className={styles.statusDot} />
           BUSINESSES PORTFOLIO
@@ -115,7 +159,7 @@ export default function BusinessesPage() {
       </header>
 
       {summary && (
-        <div className={styles.statGrid}>
+        <div className={styles.statGrid} data-boot="2">
           <div className={styles.statCard}>
             <span className={styles.statLabel}>LIVE</span>
             <span className={styles.statValue} data-tone="accent">
@@ -157,14 +201,14 @@ export default function BusinessesPage() {
         </div>
       )}
 
-      {error && <p style={{ color: "var(--danger)", margin: "8px 0", fontFamily: "var(--mono)", fontSize: 12 }}>{error}</p>}
+      {error && <p className={styles.errorBanner}>{error}</p>}
 
-      <div className={styles.grid}>
+      <div className={styles.grid} data-boot="3">
         <div className={styles.primary}>
-          <section className={styles.tableCard}>
+          <section className={styles.tableCard} data-panel>
             <div className={styles.tableHeader}>
               <span className={styles.cardTitle}>─ PORTFOLIO ─</span>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div className={styles.filters}>
                 {(["all", "live", "shutdown"] as FilterStatus[]).map((f) => (
                   <button
                     key={f}
@@ -172,16 +216,14 @@ export default function BusinessesPage() {
                     className={styles.actionBtn}
                     data-active={filter === f}
                     onClick={() => setFilter(f)}
-                    style={filter === f ? { borderColor: "var(--accent)", color: "var(--accent)" } : {}}
                   >
                     {f}
                   </button>
                 ))}
                 <select
-                  className={styles.actionBtn}
+                  className={styles.sortSelect}
                   value={sort}
                   onChange={(e) => setSort(e.target.value as SortKey)}
-                  style={{ paddingRight: 12 }}
                 >
                   <option value="launched_at">sort: launched</option>
                   <option value="score">sort: score</option>
@@ -253,6 +295,7 @@ export default function BusinessesPage() {
                             <button
                               type="button"
                               className={styles.actionBtn}
+                              data-tone="danger"
                               onClick={() => handleShutdown(b.slug)}
                               disabled={busySlug === b.slug}
                             >
@@ -269,10 +312,115 @@ export default function BusinessesPage() {
               </table>
             </div>
           </section>
+
+          <section className={styles.tableCard} data-panel>
+            <div className={styles.tableHeader}>
+              <span className={styles.cardTitle}>─ CATEGORY INTEL ─</span>
+              <span className={styles.productMeta}>hit rate · avg score</span>
+            </div>
+            {categories.length === 0 ? (
+              <p className={styles.empty}>no launched businesses to analyze yet</p>
+            ) : (
+              <div className={styles.tableScroll}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>CATEGORY</th>
+                      <th>LIVE</th>
+                      <th>SHUTDOWN</th>
+                      <th>HIT RATE</th>
+                      <th>AVG SCORE</th>
+                      <th>TOP PRODUCT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map((c) => (
+                      <tr key={c.category}>
+                        <td className={styles.productName}>{c.category}</td>
+                        <td className={styles.numericCell}>{c.live}</td>
+                        <td className={styles.numericCell}>{c.shutdown}</td>
+                        <td className={styles.numericCell}>
+                          <span className={styles.score}>{fmtPct(c.hit_rate)}</span>
+                        </td>
+                        <td className={styles.numericCell}>{c.avg_launch_score.toFixed(3)}</td>
+                        <td className={styles.productMeta}>{c.top_product}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </div>
 
         <aside className={styles.secondary}>
-          <section className={styles.tableCard}>
+          <section className={styles.tableCard} data-panel>
+            <div className={styles.tableHeader}>
+              <span className={styles.cardTitle}>─ AUTONOMOUS LOOP ─</span>
+              <button
+                type="button"
+                className={styles.tickBtn}
+                onClick={handleLifecycleTick}
+                disabled={isTicking}
+              >
+                {isTicking ? "running..." : "▶ run tick"}
+              </button>
+            </div>
+            <p className={styles.loopNote}>
+              One tick shuts down live businesses that miss the revenue and
+              conversion targets, then promotes the top backlog item into any
+              open slot.
+            </p>
+            {tickResult && <p className={styles.tickResult}>{tickResult}</p>}
+            <div className={styles.backlogList}>
+              {candidates.length === 0 ? (
+                <p className={styles.empty}>no shutdown candidates — portfolio healthy</p>
+              ) : (
+                candidates.map((c, i) => (
+                  <div key={`${c.slug}-${i}`} className={styles.backlogItem} data-tone="danger">
+                    <div>
+                      <div className={styles.backlogProduct}>{c.product_name}</div>
+                      <div className={styles.backlogMeta}>
+                        {c.reason} · {c.days_live.toFixed(1)}d live
+                      </div>
+                    </div>
+                    <span className={styles.candidateRevenue}>{fmtMoney(c.revenue_24h)}/24h</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className={styles.tableCard} data-panel>
+            <div className={styles.tableHeader}>
+              <span className={styles.cardTitle}>─ AD EXPERIMENTS ─</span>
+              <span className={styles.productMeta}>
+                {experiments
+                  ? `${experiments.experiment_count} plans · ${fmtMoney(experiments.total_daily_budget)}/day`
+                  : "—"}
+              </span>
+            </div>
+            <div className={styles.backlogList}>
+              {(!experiments || experiments.plans.length === 0) && (
+                <p className={styles.empty}>no live businesses — experiment plans appear per live store</p>
+              )}
+              {experiments?.plans.map((plan) => (
+                <div key={plan.run_id} className={styles.backlogItem}>
+                  <div>
+                    <div className={styles.backlogProduct}>{plan.product_name}</div>
+                    <div className={styles.backlogMeta}>
+                      {plan.channels
+                        .map((ch) => `${ch.channel} ${fmtMoney(ch.budget)}`)
+                        .join(" · ")}
+                    </div>
+                  </div>
+                  <span className={styles.backlogScore}>{fmtMoney(plan.daily_budget)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.tableCard} data-panel>
             <div className={styles.tableHeader}>
               <span className={styles.cardTitle}>─ BACKLOG (TOP IDEAS) ─</span>
               <span className={styles.productMeta}>by trend_score</span>
@@ -293,19 +441,6 @@ export default function BusinessesPage() {
                 </div>
               ))}
             </div>
-          </section>
-
-          <section className={styles.tableCard}>
-            <div className={styles.tableHeader}>
-              <span className={styles.cardTitle}>─ AUTONOMOUS LOOP ─</span>
-              <span className={styles.productMeta}>(future)</span>
-            </div>
-            <p className={styles.productMeta} style={{ lineHeight: 1.5 }}>
-              When live count drops below the cap, the top backlog item will be
-              auto-promoted to a new slot. Underperforming stores will be
-              auto-shut-down after a grace window. Surfaces are ready —
-              loop ships next.
-            </p>
           </section>
         </aside>
       </div>

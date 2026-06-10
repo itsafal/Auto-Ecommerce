@@ -20,6 +20,22 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.webit.live/api/v1/realtime/serp"
 
+# Circuit breaker: once the API rejects our credentials (expired key /
+# exhausted subscription), stop calling it for the rest of the process so
+# every research query doesn't pay a doomed network round trip.
+_AUTH_FAILURE_CODES = {401, 402, 403}
+_disabled_reason: str | None = None
+
+
+def nimble_disabled_reason() -> str | None:
+    """Why Nimble was disabled this process, or None if it's still in play."""
+    return _disabled_reason
+
+
+def reset_circuit_for_tests() -> None:
+    global _disabled_reason
+    _disabled_reason = None
+
 
 def _coerce_price(value: Any) -> float | None:
     """'$53.82' or 'Usually $120' or 53.82 -> 53.82 (None if it can't be parsed)."""
@@ -94,8 +110,12 @@ async def fetch_serp_summary(query: str, *, timeout: float = 12.0) -> dict[str, 
     Best-effort: any exception/non-200 returns None so the caller can fall
     back to the LLM-only path.
     """
+    global _disabled_reason
+
     settings = get_settings()
     if not settings.nimble_api_key:
+        return None
+    if _disabled_reason is not None:
         return None
 
     base_url = (settings.nimble_api_url or DEFAULT_BASE_URL).rstrip("/")
@@ -115,6 +135,18 @@ async def fetch_serp_summary(query: str, *, timeout: float = 12.0) -> dict[str, 
             response = await client.post(base_url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code in _AUTH_FAILURE_CODES:
+            _disabled_reason = f"HTTP {status_code} — key rejected (expired subscription?)"
+            logger.warning(
+                "[nimble] API key rejected (HTTP %s) — disabling Nimble for this "
+                "process; research falls back to the LLM-only path.",
+                status_code,
+            )
+        else:
+            logger.warning("[nimble] SERP fetch failed for %r: HTTP %s", query, status_code)
+        return None
     except Exception as exc:
         logger.warning("[nimble] SERP fetch failed for %r: %s", query, exc)
         return None

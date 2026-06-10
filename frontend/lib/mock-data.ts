@@ -1,17 +1,19 @@
 export type RunStatus = "started" | "running" | "completed" | "failed" | "fallback_completed";
 export type AgentName = "research" | "buyer" | "legal_risk" | "advertising" | "score_launch" | "store_creator";
 export type EventType = "pending" | "running" | "completed" | "failed" | "fallback_used";
-export type Decision = "launch" | "no-launch";
+export type Decision = "launch" | "pause";
 
+// launch_score / decision / store_url are null while a run is in flight —
+// the backend only fills them once the scoring agent completes.
 export type LaunchRun = {
   run_id: string;
   temporal_workflow_id: string;
   product_name: string;
   slug: string;
   status: RunStatus;
-  launch_score: number;
-  decision: Decision;
-  store_url: string;
+  launch_score: number | null;
+  decision: Decision | null;
+  store_url: string | null;
   error: string | null;
 };
 

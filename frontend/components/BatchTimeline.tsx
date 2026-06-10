@@ -55,7 +55,7 @@ export function BatchTimeline({ batch, selectedRunId, onSelectRun }: Props) {
     .filter((e): e is TimelineEntry => e !== null);
 
   return (
-    <section className={styles.card}>
+    <section className={styles.card} data-panel>
       <h2 className={styles.title}>BATCH TIMELINE</h2>
       {entries.length === 0 ? (
         <p className={styles.empty}>

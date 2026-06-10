@@ -20,8 +20,8 @@ Auto‑Ecommerce is a multi‑agent commerce platform. One click deploys a batch
         │   Research → Buyer → Legal → Ad →    │
         │   Theme → Score → Store              │
         │                                       │
-        │   score ≥ 0.65 → live URL            │
-        │   score <  0.65 → retry new product  │
+        │   score ≥ 0.55 → live URL            │
+        │   score <  0.55 → retry new product  │
         └──────────────────┬────────────────────┘
                            ▼
         ┌──────────────────────────────────────┐
@@ -156,7 +156,7 @@ for attempt in 1..5:
     product = next from Trend Scout queue (filtered to skip recently-tried)
     run = LaunchRun(batch_id, slot, attempt)
     pipeline = research → buyer → legal_risk → advertising → theme_design → score_launch → create_store
-    if score >= 0.65 and risk.cleared:
+    if score >= 0.55 and risk.cleared:
         business_status = 'live'
         return                  # slot done
     else:
@@ -169,7 +169,7 @@ for attempt in 1..5:
 | Setting | Default | Env var |
 |---|---|---|
 | `batch_target_count` | 5 | `BATCH_TARGET_COUNT` |
-| `launch_score_threshold` | 0.65 | `LAUNCH_SCORE_THRESHOLD` |
+| `launch_score_threshold` | 0.55 | `LAUNCH_SCORE_THRESHOLD` |
 | `batch_max_attempts_per_slot` | 5 | `BATCH_MAX_ATTEMPTS_PER_SLOT` |
 | `dedup_window_days` | 7 | `DEDUP_WINDOW_DAYS` |
 | `max_concurrent_live` | 5 | `MAX_CONCURRENT_LIVE` |

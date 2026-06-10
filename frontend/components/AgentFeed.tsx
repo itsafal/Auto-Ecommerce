@@ -13,7 +13,7 @@ export function AgentFeed({ events }: { events: AgentEvent[] }) {
   const ordered = [...events].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
 
   return (
-    <section className={styles.panel} aria-label="Agent event feed">
+    <section className={styles.panel} aria-label="Agent event feed" data-panel>
       <div className={styles.header}>
         <h2>Live Event Feed</h2>
         <span className={styles.count}>{events.length} events</span>

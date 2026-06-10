@@ -1,38 +1,13 @@
-/* Terminal/control-room aesthetic. All tokens declared on .shell so nested
-   component CSS (AgentTimeline, AgentFeed, LaunchScore, ModelPicker) can
-   read them via var(); auth pages stay light because they don't mount .shell. */
+/* Terminal/control-room aesthetic. Theme tokens come from the global
+   `console` class (globals.css) which pages mount alongside this shell, so
+   nested component CSS (AgentTimeline, AgentFeed, LaunchScore, ModelPicker)
+   can read them via var(). */
 .shell {
-  --bg: #0b0f14;
-  --surface: #11161d;
-  --surface-2: #161c25;
-  --surface-3: #1d2532;
-  --border: #1e2530;
-  --border-strong: #2a3445;
-  --text: #e6edf3;
-  --text-muted: #8b97a8;
-  --text-dim: #5d6a7c;
-  --accent: #5fd3a3;
-  --accent-2: #e5a657;
-  --accent-3: #6aa7ff;
-  --danger: #ef6f6c;
-  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-
   min-height: 100vh;
   max-width: 1400px;
   margin: 0 auto;
   padding: 24px 28px 64px;
-  background: var(--bg);
-  color: var(--text);
   font-feature-settings: "ss01", "cv11";
-}
-
-/* Pulls the body background dark too, without leaking into auth pages. */
-.shell::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: var(--bg);
 }
 
 /* ---------- Header ---------- */
