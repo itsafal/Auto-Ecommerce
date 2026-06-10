@@ -214,7 +214,7 @@ export function BatchPanel({
     setError(null);
     try {
       // No knobs in the autonomous UI — backend defaults from settings
-      // (BATCH_TARGET_COUNT=5, LAUNCH_SCORE_THRESHOLD=0.65) drive everything.
+      // (BATCH_TARGET_COUNT=5, LAUNCH_SCORE_THRESHOLD=0.55) drive everything.
       const response = await triggerBatch({ count: 5 });
       // Persist so the panel survives a Dashboard ↔ Businesses round-trip.
       writeStoredBatchId(response.batch_id);
@@ -266,7 +266,7 @@ export function BatchPanel({
         <span className={styles.subtitle}>
           {batch
             ? `batch_id ${shortRun(batch.batch_id)} · ${approved}/${batch.target_count} approved`
-            : "5 stores · score ≥ 0.65 · 2 tries/product · slot keeps trying"}
+            : "5 stores · score ≥ 0.55 · 2 tries/product · slot keeps trying"}
         </span>
       </div>
 
