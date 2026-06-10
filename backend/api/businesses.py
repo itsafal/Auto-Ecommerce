@@ -160,15 +160,23 @@ async def list_businesses(status: str | None = None, sort: str = "launched_at") 
 
 @router.post("/{slug}/shutdown")
 async def shutdown_business(slug: str) -> dict[str, Any]:
-    target = next((r for r in _portfolio_runs() if r.slug == slug), None)
-    if target is None:
+    # A slug can map to several runs (the same product launched more than
+    # once); shut down every one that isn't already, so the storefront URL
+    # the operator clicked actually goes dark.
+    targets = [r for r in _portfolio_runs() if r.slug == slug]
+    if not targets:
         raise HTTPException(status_code=404, detail=f"No live business for slug {slug!r}")
 
-    target.business_status = "shutdown"
-    target.shutdown_at = datetime.now(timezone.utc)
-    target.shutdown_reason = "manual"
-    run_store.upsert_run(target)
-    return _business_from_run(target)
+    updated: LaunchRun | None = None
+    for target in targets:
+        if target.business_status == "shutdown":
+            continue
+        target.business_status = "shutdown"
+        target.shutdown_at = datetime.now(timezone.utc)
+        target.shutdown_reason = "manual"
+        run_store.upsert_run(target)
+        updated = target
+    return _business_from_run(updated or targets[0])
 
 
 @router.get("/backlog")

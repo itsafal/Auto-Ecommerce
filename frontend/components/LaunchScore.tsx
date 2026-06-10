@@ -13,7 +13,7 @@ export function LaunchScore({ score }: { score: LaunchScoreBreakdown }) {
   ] as const;
 
   return (
-    <section className={styles.panel} aria-label="Launch score">
+    <section className={styles.panel} aria-label="Launch score" data-panel>
       <div className={styles.header}>
         <div>
           <h2>Launch Score</h2>

@@ -112,6 +112,7 @@
 
 .deployButton:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent, #0f766e) 28%, var(--surface, #ffffff));
+  box-shadow: 0 0 24px color-mix(in srgb, var(--accent, #0f766e) 30%, transparent);
 }
 
 .deployButton:disabled {
@@ -152,6 +153,7 @@
 
 .slot[data-status="approved"] {
   border-left-color: var(--accent, #0f766e);
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--accent, #0f766e) 7%, transparent);
 }
 
 .slot[data-status="rejected"] {
@@ -169,6 +171,7 @@
 
 .slot[data-clickable="true"]:hover {
   background: color-mix(in srgb, var(--accent, #0f766e) 8%, var(--surface-2, #f8fafc));
+  transform: translateY(-1px);
 }
 
 .slot[data-selected="true"] {
@@ -211,6 +214,11 @@
 .statusPill[data-status="running"] {
   background: color-mix(in srgb, var(--accent-2, #e5a657) 20%, transparent);
   color: var(--accent-2, #e5a657);
+  animation: runningPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes runningPulse {
+  50% { opacity: 0.55; }
 }
 
 .statusPill[data-status="rejected"] {

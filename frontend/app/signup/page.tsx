@@ -31,8 +31,8 @@ export default function SignupPage() {
   }
 
   return (
-    <main className={styles.shell}>
-      <section className={styles.panel}>
+    <main className={`console ${styles.shell}`}>
+      <section className={styles.panel} data-panel data-boot="1">
         <p className={styles.eyebrow}>Operator access</p>
         <h1>Create account</h1>
         <p className={styles.copy}>Create a database-backed account for the launch dashboard.</p>

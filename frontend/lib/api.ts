@@ -100,6 +100,53 @@ export type BacklogResponse = {
   max_concurrent_live: number;
 };
 
+export type ShutdownCandidate = {
+  slug: string;
+  product_name: string;
+  reason: string;
+  revenue_24h: number;
+  conversion_rate: number;
+  days_live: number;
+};
+
+export type LifecycleTickResult = {
+  shutdown_candidates: ShutdownCandidate[];
+  shutdowns: Business[];
+  promotion: BatchTriggerResponse | null;
+  live_count: number;
+  max_concurrent_live: number;
+};
+
+export type ExperimentChannel = {
+  channel: string;
+  budget: number;
+  objective: string;
+};
+
+export type ExperimentPlan = {
+  run_id: string;
+  slug: string;
+  product_name: string;
+  daily_budget: number;
+  channels: ExperimentChannel[];
+};
+
+export type PortfolioExperiments = {
+  plans: ExperimentPlan[];
+  total_daily_budget: number;
+  experiment_count: number;
+};
+
+export type CategoryStat = {
+  category: string;
+  total: number;
+  live: number;
+  shutdown: number;
+  hit_rate: number;
+  avg_launch_score: number;
+  top_product: string;
+};
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -110,6 +157,15 @@ export type AuthResponse = {
   access_token: string;
   token_type: "bearer";
   user: AuthUser;
+};
+
+export type LLMConfig = {
+  provider: "auto" | "anthropic" | "portkey" | "gemini" | "google";
+  auto_chain_winner: string;
+  anthropic_model: string;
+  gemini_model: string;
+  portkey_model: string;
+  keys_set: { anthropic: boolean; portkey: boolean; gemini: boolean };
 };
 
 export const useMockMode = () =>
@@ -126,6 +182,39 @@ const authHeaders = (): Record<string, string> => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
+type RequestOptions = {
+  method?: "GET" | "POST";
+  body?: unknown;
+  /** Attach the stored bearer token (default true). Login/signup opt out. */
+  withAuth?: boolean;
+  /** Error message when the backend doesn't supply a `detail`. */
+  errorMessage: string;
+};
+
+/** Single fetch path for every API call: base URL, JSON encoding, bearer
+ *  token, and `detail`-aware error extraction live here so the endpoint
+ *  functions below stay one-liners. */
+async function request<T>(
+  path: string,
+  { method = "GET", body, withAuth = true, errorMessage }: RequestOptions
+): Promise<T> {
+  const headers: Record<string, string> = withAuth ? authHeaders() : {};
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail ?? errorMessage);
+  }
+  return response.json();
+}
+
 export async function triggerAgentRun(productName: string): Promise<TriggerResponse> {
   if (useMockMode()) {
     return {
@@ -135,15 +224,11 @@ export async function triggerAgentRun(productName: string): Promise<TriggerRespo
     };
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/demo/trigger`, {
+  return request("/api/demo/trigger", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ product_name: productName })
+    body: { product_name: productName },
+    errorMessage: "Failed to trigger agent run"
   });
-  if (!response.ok) {
-    throw new Error("Failed to trigger agent run");
-  }
-  return response.json();
 }
 
 export async function getRun(runId: string): Promise<LaunchRun> {
@@ -151,11 +236,7 @@ export async function getRun(runId: string): Promise<LaunchRun> {
     return { ...mockRun, run_id: runId };
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/runs/${runId}`);
-  if (!response.ok) {
-    throw new Error("Failed to load run");
-  }
-  return response.json();
+  return request(`/api/runs/${runId}`, { errorMessage: "Failed to load run" });
 }
 
 export async function getRunEvents(runId: string): Promise<{ run_id: string; events: AgentEvent[] }> {
@@ -163,11 +244,7 @@ export async function getRunEvents(runId: string): Promise<{ run_id: string; eve
     return { run_id: runId, events: mockEvents };
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/runs/${runId}/events`);
-  if (!response.ok) {
-    throw new Error("Failed to load run events");
-  }
-  return response.json();
+  return request(`/api/runs/${runId}/events`, { errorMessage: "Failed to load run events" });
 }
 
 export async function getStore(slug: string): Promise<StoreConfig> {
@@ -175,35 +252,33 @@ export async function getStore(slug: string): Promise<StoreConfig> {
     return getStoreBySlug(slug) ?? { ...mockStore, slug };
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/stores/${slug}`);
-  if (!response.ok) {
-    throw new Error("Failed to load store");
-  }
-  return response.json();
+  return request(`/api/stores/${slug}`, { errorMessage: "Failed to load store" });
 }
 
 export async function signup(email: string, password: string, fullName: string): Promise<AuthResponse> {
-  const response = await fetch(`${apiBaseUrl()}/api/auth/signup`, {
+  return request("/api/auth/signup", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, full_name: fullName })
+    body: { email, password, full_name: fullName },
+    withAuth: false,
+    errorMessage: "Failed to create account"
   });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? "Failed to create account");
-  }
-  return response.json();
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
-  const response = await fetch(`${apiBaseUrl()}/api/auth/login`, {
+  return request("/api/auth/login", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password })
+    body: { email, password },
+    withAuth: false,
+    errorMessage: "Failed to sign in"
+  });
+}
+
+export async function getCurrentUser(token: string): Promise<AuthUser> {
+  const response = await fetch(`${apiBaseUrl()}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? "Failed to sign in");
+    throw new Error("Session expired");
   }
   return response.json();
 }
@@ -225,21 +300,10 @@ export async function getTrendingProducts(): Promise<{ products: string[]; sourc
     };
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/agents/trending-products`);
-  if (!response.ok) {
-    throw new Error("Failed to load trending products");
-  }
-  return response.json();
+  return request("/api/agents/trending-products", {
+    errorMessage: "Failed to load trending products"
+  });
 }
-
-export type LLMConfig = {
-  provider: "auto" | "anthropic" | "portkey" | "gemini" | "google";
-  auto_chain_winner: string;
-  anthropic_model: string;
-  gemini_model: string;
-  portkey_model: string;
-  keys_set: { anthropic: boolean; portkey: boolean; gemini: boolean };
-};
 
 const mockLLMConfig: LLMConfig = {
   provider: "auto",
@@ -267,16 +331,11 @@ export async function triggerBatch(
     };
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/batch/launch`, {
+  return request("/api/batch/launch", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(body)
+    body,
+    errorMessage: "Failed to start batch"
   });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? "Failed to start batch");
-  }
-  return response.json();
 }
 
 export async function getBatch(batchId: string): Promise<BatchStatusResponse> {
@@ -289,13 +348,7 @@ export async function getBatch(batchId: string): Promise<BatchStatusResponse> {
     };
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/batch/${batchId}`, {
-    headers: authHeaders()
-  });
-  if (!response.ok) {
-    throw new Error("Failed to load batch");
-  }
-  return response.json();
+  return request(`/api/batch/${batchId}`, { errorMessage: "Failed to load batch" });
 }
 
 const mockSummary: BusinessSummary = {
@@ -320,13 +373,7 @@ export async function getBusinesses(
   if (params.sort) qs.set("sort", params.sort);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
 
-  const response = await fetch(`${apiBaseUrl()}/api/businesses${suffix}`, {
-    headers: authHeaders()
-  });
-  if (!response.ok) {
-    throw new Error("Failed to load businesses");
-  }
-  return response.json();
+  return request(`/api/businesses${suffix}`, { errorMessage: "Failed to load businesses" });
 }
 
 export async function shutdownBusiness(slug: string): Promise<Business> {
@@ -334,15 +381,10 @@ export async function shutdownBusiness(slug: string): Promise<Business> {
     throw new Error("Shutdown not available in mock mode");
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/businesses/${slug}/shutdown`, {
+  return request(`/api/businesses/${slug}/shutdown`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() }
+    errorMessage: "Failed to shutdown business"
   });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? "Failed to shutdown business");
-  }
-  return response.json();
 }
 
 export async function getBacklog(limit = 10): Promise<BacklogResponse> {
@@ -350,14 +392,56 @@ export async function getBacklog(limit = 10): Promise<BacklogResponse> {
     return { items: [], live_count: 0, max_concurrent_live: 5 };
   }
 
-  const response = await fetch(
-    `${apiBaseUrl()}/api/businesses/backlog?limit=${limit}`,
-    { headers: authHeaders() }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to load backlog");
+  return request(`/api/businesses/backlog?limit=${limit}`, {
+    errorMessage: "Failed to load backlog"
+  });
+}
+
+export async function getLifecycleCandidates(): Promise<{ shutdown_candidates: ShutdownCandidate[] }> {
+  if (useMockMode()) {
+    return { shutdown_candidates: [] };
   }
-  return response.json();
+
+  return request("/api/lifecycle/candidates", {
+    errorMessage: "Failed to load lifecycle candidates"
+  });
+}
+
+export async function runLifecycleTick(promote = true): Promise<LifecycleTickResult> {
+  if (useMockMode()) {
+    return {
+      shutdown_candidates: [],
+      shutdowns: [],
+      promotion: null,
+      live_count: 0,
+      max_concurrent_live: 5
+    };
+  }
+
+  return request(`/api/lifecycle/tick?promote=${promote}`, {
+    method: "POST",
+    errorMessage: "Failed to run lifecycle tick"
+  });
+}
+
+export async function getPortfolioExperiments(dailyBudget = 50): Promise<PortfolioExperiments> {
+  if (useMockMode()) {
+    return { plans: [], total_daily_budget: 0, experiment_count: 0 };
+  }
+
+  return request(`/api/experiments/portfolio?daily_budget=${dailyBudget}`, {
+    errorMessage: "Failed to load experiment plans"
+  });
+}
+
+export async function getCategoryLeaderboard(): Promise<CategoryStat[]> {
+  if (useMockMode()) {
+    return [];
+  }
+
+  return request("/api/intelligence/category-leaderboard", {
+    errorMessage: "Failed to load category leaderboard"
+  });
 }
 
 export async function getLLMConfig(): Promise<LLMConfig> {
@@ -365,11 +449,7 @@ export async function getLLMConfig(): Promise<LLMConfig> {
     return mockLLMConfig;
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/admin/llm`);
-  if (!response.ok) {
-    throw new Error("Failed to load LLM config");
-  }
-  return response.json();
+  return request("/api/admin/llm", { errorMessage: "Failed to load LLM config" });
 }
 
 export async function updateLLMConfig(
@@ -379,24 +459,9 @@ export async function updateLLMConfig(
     return { ...mockLLMConfig, ...patch };
   }
 
-  const response = await fetch(`${apiBaseUrl()}/api/admin/llm`, {
+  return request("/api/admin/llm", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch)
+    body: patch,
+    errorMessage: "Failed to update LLM config"
   });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? "Failed to update LLM config");
-  }
-  return response.json();
-}
-
-export async function getCurrentUser(token: string): Promise<AuthUser> {
-  const response = await fetch(`${apiBaseUrl()}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!response.ok) {
-    throw new Error("Session expired");
-  }
-  return response.json();
 }

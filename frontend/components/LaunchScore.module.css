@@ -33,6 +33,7 @@
   color: var(--accent-2, #0f766e);
   font: 700 32px/1 var(--mono, ui-monospace, monospace);
   letter-spacing: -0.01em;
+  text-shadow: 0 0 22px color-mix(in srgb, var(--accent-2, #0f766e) 35%, transparent);
 }
 
 .rows {

@@ -71,6 +71,45 @@ def _snapshot() -> LLMSnapshot:
     )
 
 
+@router.get("/health")
+async def get_health() -> dict[str, object]:
+    """Report which backing services are live vs degraded to a fallback.
+
+    Lets the operator see at a glance that e.g. the ClickHouse subscription
+    lapsed and the app is running on the in-memory mirror.
+    """
+    from backend.db.clickhouse import clickhouse_fallback_reason, get_client, use_clickhouse
+    from backend.integrations.nimble import nimble_disabled_reason
+
+    s = get_settings()
+
+    if use_clickhouse():
+        # Materialize the connection (cached) so the reported status reflects
+        # reality instead of "enabled" before the first query.
+        get_client()
+    ch_reason = clickhouse_fallback_reason()
+    if not use_clickhouse():
+        clickhouse = {"status": "disabled", "detail": "USE_CLICKHOUSE!=true"}
+    elif ch_reason:
+        clickhouse = {"status": "fallback_memory", "detail": ch_reason}
+    else:
+        clickhouse = {"status": "enabled", "detail": os.environ.get("CLICKHOUSE_HOST", "")}
+
+    nimble_reason = nimble_disabled_reason()
+    if not s.nimble_api_key:
+        nimble = {"status": "not_configured", "detail": "NIMBLE_API_KEY unset"}
+    elif nimble_reason:
+        nimble = {"status": "disabled_circuit_open", "detail": nimble_reason}
+    else:
+        nimble = {"status": "configured", "detail": ""}
+
+    return {
+        "clickhouse": clickhouse,
+        "nimble": nimble,
+        "llm": _snapshot().model_dump(),
+    }
+
+
 class LLMUpdateRequest(BaseModel):
     provider: Literal["auto", "anthropic", "portkey", "gemini", "google"] | None = Field(
         default=None, description="Set LLM_PROVIDER for subsequent calls."

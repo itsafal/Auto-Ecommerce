@@ -230,9 +230,14 @@ class MemoryStore:
 
     # ----- agent decisions (long-form) -----
 
-    def write_agent_decision(self, decision: dict[str, Any]) -> dict[str, Any]:
+    def write_agent_decision(
+        self, decision: dict[str, Any] | None = None, **fields: Any
+    ) -> dict[str, Any]:
+        # Accepts a dict (native callers) or kwargs (ClickHouseClient-shaped
+        # callers) so this store is a drop-in when ClickHouse is unreachable.
         with self._lock:
-            record = deepcopy(decision)
+            record = deepcopy(decision) if decision else {}
+            record.update(fields)
             record.setdefault("id", _new_id())
             record.setdefault("timestamp", _utcnow())
             self._agent_decisions.append(record)

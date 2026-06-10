@@ -8,6 +8,7 @@ either way so callers never branch on backend.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,8 @@ from typing import Any
 import uuid
 
 from backend.db.memory_store import MemoryStore, get_memory_store
+
+logger = logging.getLogger(__name__)
 
 BUSINESS_COLUMNS = [
     "id", "product_name", "slug", "category", "launch_time", "store_url",
@@ -73,6 +76,13 @@ class ClickHouseClient:
             password=os.environ.get("CLICKHOUSE_PASSWORD", ""),
             database=os.environ.get("CLICKHOUSE_DATABASE", "default"),
             secure=_truthy(os.environ.get("CLICKHOUSE_SECURE", "true")),
+            # Fail fast when the instance is gone (expired subscription,
+            # stopped cloud service) instead of hanging API requests.
+            connect_timeout=int(os.environ.get("CLICKHOUSE_CONNECT_TIMEOUT", "5")),
+            # Queries here are small; a stopped cloud instance accepts TCP but
+            # never answers, so keep the read deadline tight — it bounds the
+            # one-time stall before the in-memory fallback kicks in.
+            send_receive_timeout=int(os.environ.get("CLICKHOUSE_QUERY_TIMEOUT", "10")),
         )
 
     def ensure_schema(self) -> None:
@@ -323,17 +333,76 @@ class ClickHouseClient:
 
 
 _client: Any = None
+_fallback_reason: str | None = None
+_fallback_at: float | None = None
+
+
+def _retry_cooldown_seconds() -> float:
+    return float(os.environ.get("CLICKHOUSE_RETRY_COOLDOWN", "120"))
+
+
+def _connect_clickhouse_or_fallback() -> Any:
+    global _fallback_reason, _fallback_at
+    import time
+
+    try:
+        client = ClickHouseClient()
+    except Exception as exc:
+        first_failure = _fallback_reason is None
+        _fallback_reason = str(exc)
+        _fallback_at = time.monotonic()
+        if first_failure:
+            logger.error(
+                "[clickhouse] connection failed (%s) — falling back to the "
+                "in-memory store. Data will NOT persist across restarts. "
+                "Reconnection will be retried every %.0fs in case the cloud "
+                "instance is just waking from idle; set USE_CLICKHOUSE=false "
+                "to stop trying.",
+                exc,
+                _retry_cooldown_seconds(),
+            )
+        return get_memory_store()
+    if _fallback_reason is not None:
+        logger.warning("[clickhouse] reconnected — resuming the ClickHouse mirror.")
+    _fallback_reason = None
+    _fallback_at = None
+    return client
 
 
 def get_client() -> Any:
-    """Return the active data store. MemoryStore by default."""
+    """Return the active data store. MemoryStore by default.
+
+    When USE_CLICKHOUSE=true but the instance is unreachable (expired
+    subscription, stopped/idling cloud service, bad credentials), this falls
+    back to the in-memory store so the app keeps working. The fallback is
+    cached — calls don't pay a connection timeout each time — but a
+    reconnection is attempted after a cooldown so an instance that was merely
+    cold-starting gets picked back up.
+    """
     global _client
     if _client is None:
-        _client = ClickHouseClient() if use_clickhouse() else get_memory_store()
+        _client = (
+            _connect_clickhouse_or_fallback() if use_clickhouse() else get_memory_store()
+        )
+    elif _fallback_reason is not None and use_clickhouse():
+        import time
+
+        if (
+            _fallback_at is not None
+            and time.monotonic() - _fallback_at >= _retry_cooldown_seconds()
+        ):
+            _client = _connect_clickhouse_or_fallback()
     return _client
+
+
+def clickhouse_fallback_reason() -> str | None:
+    """Why ClickHouse is degraded this process, or None if it's healthy/off."""
+    return _fallback_reason
 
 
 def reset_client_for_tests() -> None:
     """Reset the cached client so tests can swap between backends."""
-    global _client
+    global _client, _fallback_reason, _fallback_at
     _client = None
+    _fallback_reason = None
+    _fallback_at = None

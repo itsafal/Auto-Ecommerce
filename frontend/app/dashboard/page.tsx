@@ -149,7 +149,7 @@ export default function DashboardPage() {
 
   if (!isSessionReady) {
     return (
-      <main className={styles.shell}>
+      <main className={`console ${styles.shell}`}>
         <p className={styles.eyebrow}>Operator dashboard</p>
         <h1>Checking session</h1>
       </main>
@@ -167,13 +167,14 @@ export default function DashboardPage() {
     : "muted";
 
   return (
-    <main className={styles.shell}>
+    <main className={`console ${styles.shell}`}>
       <AppNav />
-      <header className={styles.header}>
+      <header className={styles.header} data-boot="1">
         <div className={styles.brandLockup}>
           <span className={styles.statusDot} />
           AUTO-ECOMMERCE
           <span className={styles.statusText}>● ONLINE</span>
+          <span className="blink" aria-hidden="true" />
         </div>
         {runId && run?.store_url ? (
           <a href={run.store_url} className={styles.storeLink}>
@@ -186,7 +187,7 @@ export default function DashboardPage() {
         )}
       </header>
 
-      <section className={styles.controlPanel}>
+      <section className={styles.controlPanel} data-panel data-boot="2">
         <ModelPicker />
       </section>
 
@@ -198,7 +199,7 @@ export default function DashboardPage() {
 
       {error ? <p className={styles.error}>{error}</p> : null}
 
-      <section className={styles.runStrip}>
+      <section className={styles.runStrip} data-boot="4">
         <div>
           <span>RUN_ID</span>
           <strong title={runId ?? "No run yet"}>{shortRunId(runId)}</strong>
@@ -223,7 +224,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <div className={styles.grid}>
+      <div className={styles.grid} data-boot="5">
         <div className={styles.primary}>
           <AgentTimeline events={visibleEvents} />
           <AgentFeed events={visibleEvents} />

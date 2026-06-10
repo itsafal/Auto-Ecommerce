@@ -1,34 +1,11 @@
+/* Theme tokens come from the global `console` class (globals.css), mounted
+   alongside this shell class by the page. */
 .shell {
-  --bg: #0b0f14;
-  --surface: #11161d;
-  --surface-2: #161c25;
-  --surface-3: #1d2532;
-  --border: #1e2530;
-  --border-strong: #2a3445;
-  --text: #e6edf3;
-  --text-muted: #8b97a8;
-  --text-dim: #5d6a7c;
-  --accent: #5fd3a3;
-  --accent-2: #e5a657;
-  --accent-3: #6aa7ff;
-  --danger: #ef6f6c;
-  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-
   min-height: 100vh;
   max-width: 1400px;
   margin: 0 auto;
   padding: 24px 28px 64px;
-  background: var(--bg);
-  color: var(--text);
   font-family: var(--mono);
-}
-
-.shell::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: var(--bg);
 }
 
 .header {
@@ -59,6 +36,14 @@
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: pulseDot 2s infinite;
+}
+
+@keyframes pulseDot {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  70% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
 }
 
 .slotsBadge {
@@ -114,10 +99,12 @@
 
 .statValue[data-tone="accent"] {
   color: var(--accent);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .statValue[data-tone="warn"] {
   color: var(--accent-2);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--accent-2) 30%, transparent);
 }
 
 .statSub {
@@ -197,6 +184,14 @@
   border-bottom: 1px solid var(--border);
   color: var(--text);
   vertical-align: top;
+}
+
+.table tbody tr {
+  transition: background 0.12s ease;
+}
+
+.table tbody tr:hover {
+  background: var(--surface-2);
 }
 
 .statusPill {
@@ -283,6 +278,17 @@
 }
 
 .actionBtn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.actionBtn[data-active="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+}
+
+.actionBtn[data-tone="danger"]:hover:not(:disabled) {
   border-color: var(--danger);
   color: var(--danger);
 }
@@ -290,6 +296,41 @@
 .actionBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.sortSelect {
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font: 10px var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.sortSelect:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.errorBanner {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .emptyRow {
@@ -338,12 +379,69 @@
   font-variant-numeric: tabular-nums;
 }
 
+.backlogItem[data-tone="danger"] {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface-2));
+}
+
+.candidateRevenue {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--danger);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .empty {
   color: var(--text-dim);
   font-size: 11px;
   padding: 12px;
   text-align: center;
   letter-spacing: 0.04em;
+}
+
+/* ---------- Autonomous loop panel ---------- */
+
+.tickBtn {
+  padding: 5px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--accent);
+  font: 10px var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.tickBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 26%, var(--surface));
+}
+
+.tickBtn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.loopNote {
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+}
+
+.tickResult {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 @media (max-width: 1100px) {

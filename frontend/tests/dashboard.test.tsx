@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import DashboardPage from "../app/dashboard/page";
 
@@ -13,30 +14,27 @@ async function renderDashboard() {
 }
 
 describe("DashboardPage", () => {
-  it("renders trigger button", async () => {
+  it("renders the autonomous batch deploy button", async () => {
     await renderDashboard();
-    expect(screen.getByRole("button", { name: /trigger agent run/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /deploy autonomous batch/i })
+    ).toBeInTheDocument();
   });
 
-  it("clicking trigger creates visible run_id in mock mode", async () => {
+  it("clicking deploy renders the batch slot grid in mock mode", async () => {
     const user = userEvent.setup();
     await renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: /trigger agent run/i }));
+    await user.click(screen.getByRole("button", { name: /deploy autonomous batch/i }));
 
-    await waitFor(() => {
-      expect(screen.getByText("7c0b5571-2f44-40ef-8c3f-3efca9b7e11f")).toBeInTheDocument();
-    });
-    expect(screen.getByText("https://magneticmount.fastaisolution.com")).toBeInTheDocument();
+    expect(await screen.findByText("SLOT 01")).toBeInTheDocument();
+    expect(screen.getByText("SLOT 05")).toBeInTheDocument();
   });
 
-  it("agent timeline renders all five steps", async () => {
-    const user = userEvent.setup();
+  it("agent timeline renders all pipeline steps", async () => {
     await renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: /trigger agent run/i }));
-
-    expect(await screen.findByText("Research")).toBeInTheDocument();
+    expect(screen.getByText("Research")).toBeInTheDocument();
     expect(screen.getByText("Buyer")).toBeInTheDocument();
     expect(screen.getByText("Legal / Risk")).toBeInTheDocument();
     expect(screen.getByText("Advertising")).toBeInTheDocument();

@@ -30,7 +30,7 @@ export function AgentTimeline({ events }: { events: AgentEvent[] }) {
   const progressPct = Math.round((completedCount / steps.length) * 100);
 
   return (
-    <section className={styles.panel} aria-label="Agent timeline">
+    <section className={styles.panel} aria-label="Agent timeline" data-panel>
       <div className={styles.header}>
         <h2>Agent Pipeline</h2>
         <span>
