@@ -43,7 +43,7 @@ type Props = {
 };
 
 export function BatchTimeline({ batch, selectedRunId, onSelectRun }: Props) {
-  const threshold = batch?.threshold ?? 0.65;
+  const threshold = batch?.threshold ?? 0.55;
   // Backend returns runs in completion order; preserve that ordering and
   // filter down to terminal outcomes (live or safety-cap-failed).
   const entries: TimelineEntry[] = (batch?.runs ?? [])

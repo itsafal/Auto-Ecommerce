@@ -39,7 +39,7 @@ class Settings:
     # keys are set. Override with "anthropic" | "portkey" | "gemini" to force one.
     llm_provider: str = "auto"
     # Batch deployment defaults — operator can override per request.
-    launch_score_threshold: float = 0.65
+    launch_score_threshold: float = 0.55
     batch_target_count: int = 5
     # DEPRECATED (plan 04): superseded by attempts_per_product + max_products_per_slot.
     # Kept so old env vars don't crash; ignored by the new retry loop.
@@ -85,7 +85,7 @@ def get_settings() -> Settings:
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         llm_provider=(os.getenv("LLM_PROVIDER", "auto") or "auto").strip().lower(),
-        launch_score_threshold=float(os.getenv("LAUNCH_SCORE_THRESHOLD", "0.65")),
+        launch_score_threshold=float(os.getenv("LAUNCH_SCORE_THRESHOLD", "0.55")),
         batch_target_count=int(os.getenv("BATCH_TARGET_COUNT", "5")),
         batch_max_attempts_per_slot=int(os.getenv("BATCH_MAX_ATTEMPTS_PER_SLOT", "5")),
         attempts_per_product=int(os.getenv("ATTEMPTS_PER_PRODUCT", "2")),

@@ -258,7 +258,7 @@ export async function triggerBatch(
     return {
       batch_id: "mock-batch-0001",
       target_count: target,
-      threshold: body.threshold ?? 0.65,
+      threshold: body.threshold ?? 0.55,
       slots: Array.from({ length: target }, (_, i) => ({
         slot: i,
         run_id: `${mockRunId.slice(0, 8)}-slot${i}`,
@@ -284,7 +284,7 @@ export async function getBatch(batchId: string): Promise<BatchStatusResponse> {
     return {
       batch_id: batchId,
       target_count: 5,
-      threshold: 0.65,
+      threshold: 0.55,
       runs: []
     };
   }
@@ -305,7 +305,7 @@ const mockSummary: BusinessSummary = {
   total_revenue: 0,
   total_views_24h: 0,
   hit_rate: 0,
-  threshold: 0.65
+  threshold: 0.55
 };
 
 export async function getBusinesses(
