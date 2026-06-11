@@ -1,0 +1,104 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 300px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  font: 11px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+}
+
+.badge {
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 4px;
+  font: 10px var(--mono, ui-monospace, monospace);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.badge[data-tone="ok"],
+.service strong[data-tone="ok"] {
+  color: var(--accent, #5fd3a3);
+}
+
+.badge[data-tone="warn"],
+.service strong[data-tone="warn"] {
+  color: var(--accent-2, #f5c16c);
+}
+
+.badge[data-tone="muted"],
+.service strong[data-tone="muted"] {
+  color: var(--text-dim, rgba(255, 255, 255, 0.45));
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.service {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 4px;
+  background: var(--surface-2, rgba(15, 15, 18, 0.7));
+}
+
+.service span,
+.runtime span {
+  display: block;
+  color: var(--text-dim, rgba(255, 255, 255, 0.45));
+  font: 10px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.service strong {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 12px var(--mono, ui-monospace, monospace);
+  font-weight: 700;
+}
+
+.runtime {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.runtime span {
+  padding: 4px 7px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 4px;
+}
+
+.detail {
+  margin: 0;
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+  font: 11px/1.45 var(--mono, ui-monospace, monospace);
+}
+
+@media (max-width: 900px) {
+  .card {
+    min-width: 0;
+  }
+}

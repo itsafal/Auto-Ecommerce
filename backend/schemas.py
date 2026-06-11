@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,6 +38,15 @@ class Decision(StrEnum):
     launch = "launch"
     pause = "pause"
     reject = "reject"
+
+
+StorefrontEventType = Literal[
+    "view_product",
+    "click_cta",
+    "begin_checkout",
+    "email_capture",
+    "purchase_attempt",
+]
 
 
 class LaunchRequest(BaseModel):
@@ -199,6 +208,20 @@ class AgentEvent(BaseModel):
 class AgentEventsResponse(BaseModel):
     run_id: UUID
     events: list[AgentEvent]
+
+
+class StorefrontEventRequest(BaseModel):
+    event_type: StorefrontEventType
+    session_id: str = Field(min_length=8, max_length=120)
+    source: str = Field(default="direct", max_length=80)
+    value: float = Field(default=0.0, ge=0.0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StorefrontEventResponse(BaseModel):
+    accepted: bool = True
+    slug: str
+    event_type: StorefrontEventType
 
 
 class LaunchRun(BaseModel):

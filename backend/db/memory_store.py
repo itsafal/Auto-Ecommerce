@@ -31,6 +31,7 @@ class MemoryStore:
         self._events: list[dict[str, Any]] = []
         self._businesses: dict[str, dict[str, Any]] = {}
         self._trend_signals: list[dict[str, Any]] = []
+        self._storefront_events: list[dict[str, Any]] = []
         self._relationships: list[dict[str, Any]] = []
         self._agent_decisions: list[dict[str, Any]] = []
         self._users: dict[str, dict[str, Any]] = {}
@@ -196,6 +197,33 @@ class MemoryStore:
             )
             return [deepcopy(s) for s in signals[:limit]]
 
+    # ----- storefront analytics -----
+
+    def write_storefront_event(self, event: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            record = deepcopy(event)
+            record.setdefault("id", _new_id())
+            record.setdefault("timestamp", _utcnow())
+            record.setdefault("value", 0.0)
+            record.setdefault("metadata", {})
+            self._storefront_events.append(record)
+            return deepcopy(record)
+
+    def list_storefront_events(
+        self,
+        slug: str | None = None,
+        run_id: str | None = None,
+        limit: int = 10000,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            events = self._storefront_events
+            if slug is not None:
+                events = [e for e in events if e.get("slug") == slug]
+            if run_id is not None:
+                events = [e for e in events if e.get("run_id") == run_id]
+            events = sorted(events, key=lambda e: e["timestamp"], reverse=True)
+            return [deepcopy(e) for e in events[:limit]]
+
     # ----- relationships -----
 
     def write_relationship(
@@ -297,6 +325,7 @@ class MemoryStore:
             self._events.clear()
             self._businesses.clear()
             self._trend_signals.clear()
+            self._storefront_events.clear()
             self._relationships.clear()
             self._agent_decisions.clear()
             self._users.clear()

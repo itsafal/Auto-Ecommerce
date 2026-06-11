@@ -103,6 +103,19 @@ CREATE TABLE IF NOT EXISTS agent_events (
 ) ENGINE = MergeTree()
 ORDER BY (run_id, timestamp);
 
+CREATE TABLE IF NOT EXISTS storefront_events (
+    id UUID,
+    run_id Nullable(UUID),
+    slug LowCardinality(String),
+    event_type LowCardinality(String),
+    session_id String,
+    source LowCardinality(String),
+    value Float64 DEFAULT 0,
+    metadata String,
+    timestamp DateTime DEFAULT now()
+) ENGINE = MergeTree()
+ORDER BY (slug, timestamp, id);
+
 CREATE TABLE IF NOT EXISTS business_relationships (
     from_business_id UUID,
     to_business_id UUID,

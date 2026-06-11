@@ -68,6 +68,7 @@ export type Business = {
   conversion_rate: number;
   bounce_rate: number;
   top_sources: TopSource[];
+  metric_source: "synthetic" | "events";
 };
 
 export type BusinessSummary = {
@@ -81,7 +82,7 @@ export type BusinessSummary = {
 };
 
 export type BusinessesResponse = {
-  data_source: "synthetic";
+  data_source: "synthetic" | "events" | "mixed";
   summary: BusinessSummary;
   businesses: Business[];
 };
@@ -167,6 +168,37 @@ export type LLMConfig = {
   portkey_model: string;
   keys_set: { anthropic: boolean; portkey: boolean; gemini: boolean };
 };
+
+type ServiceStatus = {
+  status: string;
+  detail: string;
+};
+
+export type HealthSnapshot = {
+  clickhouse: ServiceStatus;
+  nimble: ServiceStatus;
+  llm: LLMConfig;
+  runtime: {
+    demo_mode: boolean;
+    auth_required_for_runs: boolean;
+    temporal_enabled: boolean;
+    batch_target_count: number;
+    launch_score_threshold: number;
+    max_concurrent_live: number;
+  };
+  analytics: ServiceStatus;
+  readiness: {
+    status: "live_ready" | "needs_attention";
+    blockers: string[];
+  };
+};
+
+export type StorefrontEventType =
+  | "view_product"
+  | "click_cta"
+  | "begin_checkout"
+  | "email_capture"
+  | "purchase_attempt";
 
 export const useMockMode = () =>
   process.env.NEXT_PUBLIC_USE_MOCKS !== "false" ||
@@ -314,6 +346,25 @@ const mockLLMConfig: LLMConfig = {
   keys_set: { anthropic: false, portkey: false, gemini: false }
 };
 
+const mockHealth: HealthSnapshot = {
+  clickhouse: { status: "disabled", detail: "USE_CLICKHOUSE!=true" },
+  nimble: { status: "not_configured", detail: "NIMBLE_API_KEY unset" },
+  llm: mockLLMConfig,
+  runtime: {
+    demo_mode: true,
+    auth_required_for_runs: true,
+    temporal_enabled: false,
+    batch_target_count: 5,
+    launch_score_threshold: 0.55,
+    max_concurrent_live: 5
+  },
+  analytics: { status: "ready_no_events", detail: "waiting for the first storefront event" },
+  readiness: {
+    status: "needs_attention",
+    blockers: ["mock frontend mode"]
+  }
+};
+
 export async function triggerBatch(
   body: { count?: number; threshold?: number; products?: string[] } = {}
 ): Promise<BatchTriggerResponse> {
@@ -374,6 +425,33 @@ export async function getBusinesses(
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
 
   return request(`/api/businesses${suffix}`, { errorMessage: "Failed to load businesses" });
+}
+
+export async function trackStorefrontEvent(
+  slug: string,
+  event: {
+    event_type: StorefrontEventType;
+    session_id: string;
+    source?: string;
+    value?: number;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<void> {
+  if (useMockMode()) {
+    return;
+  }
+
+  await request(`/api/stores/${slug}/events`, {
+    method: "POST",
+    body: {
+      source: "direct",
+      value: 0,
+      metadata: {},
+      ...event
+    },
+    withAuth: false,
+    errorMessage: "Failed to track storefront event"
+  });
 }
 
 export async function shutdownBusiness(slug: string): Promise<Business> {
@@ -450,6 +528,14 @@ export async function getLLMConfig(): Promise<LLMConfig> {
   }
 
   return request("/api/admin/llm", { errorMessage: "Failed to load LLM config" });
+}
+
+export async function getHealth(): Promise<HealthSnapshot> {
+  if (useMockMode()) {
+    return mockHealth;
+  }
+
+  return request("/api/admin/health", { errorMessage: "Failed to load health status" });
 }
 
 export async function updateLLMConfig(

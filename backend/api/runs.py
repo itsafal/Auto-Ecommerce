@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Header, HTTPException
@@ -18,6 +19,8 @@ from backend.schemas import (
     LaunchTriggerResponse,
     RunStatus,
     StoreOutput,
+    StorefrontEventRequest,
+    StorefrontEventResponse,
     StoreTheme,
     WorkflowInput,
     WorkflowResult,
@@ -249,6 +252,31 @@ async def get_store(slug: str) -> StoreOutput:
             return _store_from_run(run)
 
     raise HTTPException(status_code=404, detail="Store not found")
+
+
+@router.post("/stores/{slug}/events", response_model=StorefrontEventResponse)
+async def record_storefront_event(
+    slug: str,
+    request: StorefrontEventRequest,
+) -> StorefrontEventResponse:
+    store = await get_store(slug)
+    matching_run = next(
+        (run for run in run_store.list_runs_with_stores() if run.slug == store.slug),
+        None,
+    )
+    run_store.record_storefront_event(
+        {
+            "run_id": str(matching_run.run_id) if matching_run else None,
+            "slug": store.slug,
+            "event_type": request.event_type,
+            "session_id": request.session_id,
+            "source": request.source or "direct",
+            "value": float(request.value or 0.0),
+            "metadata": request.metadata,
+            "timestamp": datetime.now(timezone.utc),
+        }
+    )
+    return StorefrontEventResponse(slug=store.slug, event_type=request.event_type)
 
 
 @router.get("/stores/{slug}/agent-manifest")
