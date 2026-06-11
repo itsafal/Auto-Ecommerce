@@ -49,6 +49,7 @@ function fmtPct(n: number): string {
 function metricsLabel(source: BusinessesResponse["data_source"] | undefined): string {
   if (source === "events") return "event metrics";
   if (source === "mixed") return "mixed metrics";
+  if (source === "insufficient_data" || source === "none") return "insufficient data";
   return "synthetic metrics";
 }
 

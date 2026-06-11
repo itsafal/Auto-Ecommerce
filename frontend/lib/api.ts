@@ -81,7 +81,7 @@ export type Business = {
   bounce_rate: number;
   top_sources: TopSource[];
   funnel: FunnelMetrics;
-  metric_source: "synthetic" | "events";
+  metric_source: "synthetic" | "events" | "insufficient_data";
 };
 
 export type BusinessSummary = {
@@ -95,7 +95,7 @@ export type BusinessSummary = {
 };
 
 export type BusinessesResponse = {
-  data_source: "synthetic" | "events" | "mixed";
+  data_source: "none" | "synthetic" | "events" | "mixed" | "insufficient_data";
   summary: BusinessSummary;
   businesses: Business[];
 };

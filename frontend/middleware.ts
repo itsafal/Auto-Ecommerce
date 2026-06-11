@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const DEFAULT_BASE_DOMAINS = ["fastaisolution.com", "localhost"];
+const APP_ROUTES = new Set(["/", "/dashboard", "/businesses", "/login", "/signup"]);
 
 function getBaseDomains() {
   const fromEnv = process.env.NEXT_PUBLIC_BASE_DOMAIN;
@@ -25,8 +26,9 @@ export function extractSubdomainSlug(host: string, baseDomain?: string) {
 export function middleware(req: NextRequest) {
   const host = req.headers.get("host") || "";
   const slug = extractSubdomainSlug(host);
+  const pathname = req.nextUrl.pathname;
 
-  if (slug) {
+  if (slug && !APP_ROUTES.has(pathname) && !pathname.startsWith("/store/")) {
     return NextResponse.rewrite(new URL(`/store/${slug}`, req.url));
   }
 
