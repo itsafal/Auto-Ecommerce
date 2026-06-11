@@ -101,6 +101,7 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
 
   function handleCtaClick(location: string) {
     track("click_cta", { location });
+    track("begin_checkout", { location });
   }
 
   function handleCheckoutSubmit(event: FormEvent<HTMLFormElement>) {

@@ -329,6 +329,64 @@ export default function BusinessesPage() {
 
           <section className={styles.tableCard} data-panel>
             <div className={styles.tableHeader}>
+              <span className={styles.cardTitle}>─ STORE FUNNEL ─</span>
+              <span className={styles.productMeta}>views → cta → capture → purchase</span>
+            </div>
+            <div className={styles.tableScroll}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>PRODUCT</th>
+                    <th>VIEWS</th>
+                    <th>CTA</th>
+                    <th>EMAIL</th>
+                    <th>CHECKOUT</th>
+                    <th>PURCHASE</th>
+                    <th>CTA RATE</th>
+                    <th>CAPTURE</th>
+                    <th>PURCHASE RATE</th>
+                    <th>SIGNAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleBusinesses.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className={styles.emptyRow}>
+                        no funnel data for this filter
+                      </td>
+                    </tr>
+                  )}
+                  {visibleBusinesses.map((b) => (
+                    <tr key={`${b.run_id}-funnel`}>
+                      <td>
+                        <span className={styles.productName}>{b.product_name}</span>
+                      </td>
+                      <td className={styles.numericCell}>{fmtNum(b.funnel.views)}</td>
+                      <td className={styles.numericCell}>{fmtNum(b.funnel.cta_clicks)}</td>
+                      <td className={styles.numericCell}>{fmtNum(b.funnel.email_captures)}</td>
+                      <td className={styles.numericCell}>{fmtNum(b.funnel.checkouts)}</td>
+                      <td className={styles.numericCell}>{fmtNum(b.funnel.purchase_attempts)}</td>
+                      <td className={styles.numericCell}>
+                        <span className={styles.score}>{fmtPct(b.funnel.cta_rate)}</span>
+                      </td>
+                      <td className={styles.numericCell}>{fmtPct(b.funnel.capture_rate)}</td>
+                      <td className={styles.numericCell}>
+                        <span className={styles.score}>{fmtPct(b.funnel.purchase_rate)}</span>
+                      </td>
+                      <td className={styles.numericCell}>
+                        <span className={styles.metricBadge} data-source={b.metric_source}>
+                          {b.metric_source}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className={styles.tableCard} data-panel>
+            <div className={styles.tableHeader}>
               <span className={styles.cardTitle}>─ CATEGORY INTEL ─</span>
               <span className={styles.productMeta}>hit rate · avg score</span>
             </div>

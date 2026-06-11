@@ -112,6 +112,17 @@ def test_storefront_events_drive_portfolio_metrics() -> None:
     assert business["views_24h"] == 1
     assert business["revenue_total"] == 29.99
     assert business["conversion_rate"] == 1.0
+    assert business["funnel"] == {
+        "views": 1,
+        "cta_clicks": 1,
+        "checkouts": 1,
+        "email_captures": 0,
+        "purchase_attempts": 1,
+        "cta_rate": 1.0,
+        "checkout_rate": 1.0,
+        "capture_rate": 0.0,
+        "purchase_rate": 1.0,
+    }
     assert business["top_sources"][0]["source"] == "google"
 
 
