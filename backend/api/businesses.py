@@ -1,9 +1,9 @@
 """Businesses portfolio API.
 
-Reads from the existing `launch_runs` storage (in-memory + ClickHouse), merges
-storefront analytics events when present, and falls back to deterministic
-synthetic metrics for stores that have not received traffic yet. Responses
-include a `data_source` value so the UI can label the numbers honestly.
+Reads from the existing `launch_runs` storage (in-memory + ClickHouse) and
+merges storefront analytics events when present. In demo mode only, stores
+without traffic receive deterministic synthetic metrics; otherwise they are
+reported as insufficient data with zeroed metrics.
 """
 
 from __future__ import annotations
@@ -68,6 +68,26 @@ def _mock_metrics(slug: str) -> dict[str, Any]:
             email_captures=max(1, int(views_total * conversion_rate * 1.2)),
             purchase_attempts=max(1, int(views_total * conversion_rate)),
         ),
+    }
+
+
+def _empty_metrics() -> dict[str, Any]:
+    return {
+        "views_total": 0,
+        "views_24h": 0,
+        "revenue_total": 0.0,
+        "revenue_24h": 0.0,
+        "conversion_rate": 0.0,
+        "bounce_rate": 0.0,
+        "top_sources": [],
+        "funnel": _funnel(
+            views=0,
+            cta_clicks=0,
+            checkouts=0,
+            email_captures=0,
+            purchase_attempts=0,
+        ),
+        "metric_source": "insufficient_data",
     }
 
 
@@ -251,6 +271,8 @@ def _metrics_for_run(run: LaunchRun) -> dict[str, Any]:
     real = _event_metrics(run)
     if real is not None:
         return real
+    if not get_settings().demo_mode:
+        return _empty_metrics()
     metrics = _mock_metrics(run.slug or str(run.run_id))
     return {**metrics, "metric_source": "synthetic"}
 
@@ -283,10 +305,14 @@ async def list_businesses(status: str | None = None, sort: str = "launched_at") 
     businesses.sort(key=key_fn, reverse=reverse)
 
     metric_sources = {b["metric_source"] for b in businesses}
-    if not businesses or metric_sources == {"synthetic"}:
-        data_source = "synthetic"
+    if not businesses:
+        data_source = "none"
     elif metric_sources == {"events"}:
         data_source = "events"
+    elif metric_sources == {"synthetic"}:
+        data_source = "synthetic"
+    elif metric_sources == {"insufficient_data"}:
+        data_source = "insufficient_data"
     else:
         data_source = "mixed"
 

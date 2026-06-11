@@ -126,11 +126,36 @@ def test_storefront_events_drive_portfolio_metrics() -> None:
     assert business["top_sources"][0]["source"] == "google"
 
 
+def test_business_metrics_are_insufficient_without_events_outside_demo(monkeypatch) -> None:
+    run = _seed_live_business()
+    monkeypatch.setenv("DEMO_MODE", "false")
+    client = TestClient(app)
+
+    portfolio = client.get("/api/businesses").json()
+
+    assert portfolio["data_source"] == "insufficient_data"
+    business = portfolio["businesses"][0]
+    assert business["slug"] == run.slug
+    assert business["metric_source"] == "insufficient_data"
+    assert business["views_total"] == 0
+    assert business["revenue_total"] == 0.0
+    assert business["top_sources"] == []
+    assert business["funnel"]["views"] == 0
+
+
 def test_lifecycle_shutdown_underperformers_marks_business(monkeypatch) -> None:
     run = _seed_live_business()
+    client = TestClient(app)
+    client.post(
+        f"/api/stores/{run.slug}/events",
+        json={
+            "event_type": "view_product",
+            "session_id": "session-lifecycle",
+            "source": "google",
+        },
+    )
     monkeypatch.setenv("LIFECYCLE_GRACE_DAYS", "0")
     monkeypatch.setenv("LIFECYCLE_MIN_REVENUE_24H", "999999")
-    client = TestClient(app)
 
     response = client.post("/api/lifecycle/shutdown-underperformers")
 
@@ -141,6 +166,22 @@ def test_lifecycle_shutdown_underperformers_marks_business(monkeypatch) -> None:
     assert updated is not None
     assert updated.business_status == "shutdown"
     assert updated.shutdown_reason.startswith("lifecycle:")
+
+
+def test_lifecycle_skips_businesses_without_real_metrics(monkeypatch) -> None:
+    run = _seed_live_business()
+    monkeypatch.setenv("DEMO_MODE", "false")
+    monkeypatch.setenv("LIFECYCLE_GRACE_DAYS", "0")
+    monkeypatch.setenv("LIFECYCLE_MIN_REVENUE_24H", "999999")
+    client = TestClient(app)
+
+    response = client.post("/api/lifecycle/shutdown-underperformers")
+
+    assert response.status_code == 200
+    assert response.json()["shutdowns"] == []
+    updated = run_store.get_run(run.run_id)
+    assert updated is not None
+    assert updated.business_status == "live"
 
 
 def test_experiment_plan_is_deterministic() -> None:

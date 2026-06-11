@@ -67,6 +67,11 @@
   color: var(--accent-2);
 }
 
+.synthetic[data-source="insufficient_data"],
+.synthetic[data-source="none"] {
+  color: var(--text-dim);
+}
+
 /* ---------- Stat cards row ---------- */
 
 .statGrid {
@@ -251,6 +256,11 @@
 .metricBadge[data-source="synthetic"] {
   border-color: color-mix(in srgb, var(--accent-2) 35%, var(--border));
   color: var(--accent-2);
+}
+
+.metricBadge[data-source="insufficient_data"] {
+  border-color: var(--border);
+  color: var(--text-dim);
 }
 
 .productCell {

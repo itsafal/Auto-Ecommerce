@@ -1,8 +1,9 @@
 """Autonomous portfolio lifecycle.
 
 This module is scheduler-agnostic: callers can invoke `run_lifecycle_tick()`
-from an admin button, cron job, or worker loop. It uses the existing portfolio
-projection and deterministic metrics until real analytics land.
+from an admin button, cron job, or worker loop. Shutdown decisions only use
+event-backed storefront metrics; stores with insufficient or demo data are
+left running until real traffic arrives.
 """
 
 from __future__ import annotations
@@ -38,6 +39,8 @@ def evaluate_shutdown_candidates() -> list[ShutdownCandidate]:
     candidates: list[ShutdownCandidate] = []
     for business in _portfolio():
         if business.get("business_status") != "live":
+            continue
+        if business.get("metric_source") != "events":
             continue
         days_live = float(business.get("days_live") or 0.0)
         if days_live < settings.lifecycle_grace_days:
