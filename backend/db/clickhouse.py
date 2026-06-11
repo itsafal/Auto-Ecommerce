@@ -266,6 +266,64 @@ class ClickHouseClient:
             ).named_results()
         )
 
+    def write_storefront_event(self, event):
+        record = dict(event)
+        record.setdefault("id", str(uuid.uuid4()))
+        record.setdefault("run_id", None)
+        record.setdefault("slug", "")
+        record.setdefault("event_type", "")
+        record.setdefault("session_id", "")
+        record.setdefault("source", "direct")
+        record.setdefault("value", 0.0)
+        record.setdefault("metadata", {})
+        event_id = uuid.UUID(record["id"]) if isinstance(record["id"], str) else record["id"]
+        run_id = record["run_id"]
+        if isinstance(run_id, str) and run_id:
+            run_id = uuid.UUID(run_id)
+        elif not run_id:
+            run_id = None
+        self._client.insert(
+            "storefront_events",
+            [[
+                event_id,
+                run_id,
+                record["slug"],
+                record["event_type"],
+                record["session_id"],
+                record["source"],
+                float(record.get("value") or 0.0),
+                json.dumps(record.get("metadata") or {}),
+            ]],
+            column_names=[
+                "id",
+                "run_id",
+                "slug",
+                "event_type",
+                "session_id",
+                "source",
+                "value",
+                "metadata",
+            ],
+        )
+        return event
+
+    def list_storefront_events(self, slug=None, run_id=None, limit=10000):
+        clauses: list[str] = []
+        params: dict[str, Any] = {"limit": int(limit)}
+        if slug is not None:
+            clauses.append("slug = %(slug)s")
+            params["slug"] = slug
+        if run_id is not None:
+            clauses.append("run_id = %(run_id)s")
+            params["run_id"] = run_id
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        return list(
+            self._client.query(
+                f"SELECT * FROM storefront_events{where} ORDER BY timestamp DESC LIMIT %(limit)s",
+                parameters=params,
+            ).named_results()
+        )
+
     def write_relationship(self, from_business_id, to_business_id, relationship_type, weight, reason=""):
         f = uuid.UUID(from_business_id) if isinstance(from_business_id, str) else from_business_id
         t = uuid.UUID(to_business_id) if isinstance(to_business_id, str) else to_business_id

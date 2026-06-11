@@ -259,6 +259,38 @@ class InMemoryRunStore:
             logger.warning("[run_store] list_trend_signals failed: %s", exc)
         return []
 
+    def record_storefront_event(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        """Append a storefront analytics event to the active backing store."""
+        try:
+            client = get_client()
+            if not hasattr(client, "write_storefront_event"):
+                return None
+            return client.write_storefront_event(event)
+        except Exception as exc:
+            logger.error(
+                "[run_store] write_storefront_event FAILED for %r/%r: %s",
+                event.get("slug"),
+                event.get("event_type"),
+                exc,
+                exc_info=True,
+            )
+            return None
+
+    def list_storefront_events(
+        self,
+        slug: str | None = None,
+        run_id: str | None = None,
+        limit: int = 10000,
+    ) -> list[dict[str, Any]]:
+        """Return storefront analytics events from the active backing store."""
+        try:
+            client = get_client()
+            if hasattr(client, "list_storefront_events"):
+                return client.list_storefront_events(slug=slug, run_id=run_id, limit=limit)
+        except Exception as exc:
+            logger.warning("[run_store] list_storefront_events failed: %s", exc)
+        return []
+
     # ----- ClickHouse mirror (dual-write side) -----
 
     def _mirror_run(self, run: LaunchRun, is_new: bool) -> None:

@@ -8,6 +8,7 @@ import { AppNav } from "@/components/AppNav";
 import { BatchPanel } from "@/components/BatchPanel";
 import { BatchTimeline } from "@/components/BatchTimeline";
 import { LaunchScore } from "@/components/LaunchScore";
+import { LiveReadiness } from "@/components/LiveReadiness";
 import { ModelPicker } from "@/components/ModelPicker";
 import {
   type BatchStatusResponse,
@@ -189,6 +190,7 @@ export default function DashboardPage() {
 
       <section className={styles.controlPanel} data-panel data-boot="2">
         <ModelPicker />
+        <LiveReadiness />
       </section>
 
       <BatchPanel

@@ -103,10 +103,51 @@ async def get_health() -> dict[str, object]:
     else:
         nimble = {"status": "configured", "detail": ""}
 
+    analytics_events = []
+    try:
+        from backend.store import run_store
+
+        analytics_events = run_store.list_storefront_events(limit=1)
+    except Exception:
+        analytics_events = []
+
+    blockers: list[str] = []
+    if s.demo_mode:
+        blockers.append("DEMO_MODE=true")
+    if not s.require_auth_for_runs:
+        blockers.append("REQUIRE_AUTH_FOR_RUNS=false")
+    if not use_clickhouse() or ch_reason:
+        blockers.append("ClickHouse persistence unavailable")
+    if not s.nimble_api_key or nimble_reason:
+        blockers.append("Nimble market data unavailable")
+    llm_snapshot = _snapshot()
+    if llm_snapshot.auto_chain_winner == "fixture":
+        blockers.append("No live LLM key configured")
+
     return {
         "clickhouse": clickhouse,
         "nimble": nimble,
-        "llm": _snapshot().model_dump(),
+        "llm": llm_snapshot.model_dump(),
+        "runtime": {
+            "demo_mode": s.demo_mode,
+            "auth_required_for_runs": s.require_auth_for_runs,
+            "temporal_enabled": s.use_temporal,
+            "batch_target_count": s.batch_target_count,
+            "launch_score_threshold": s.launch_score_threshold,
+            "max_concurrent_live": s.max_concurrent_live,
+        },
+        "analytics": {
+            "status": "receiving_events" if analytics_events else "ready_no_events",
+            "detail": (
+                "storefront events have been recorded"
+                if analytics_events
+                else "waiting for the first storefront event"
+            ),
+        },
+        "readiness": {
+            "status": "live_ready" if not blockers else "needs_attention",
+            "blockers": blockers,
+        },
     }
 
 

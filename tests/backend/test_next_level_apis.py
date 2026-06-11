@@ -75,6 +75,46 @@ def test_agent_manifest_exposes_checkout_contract() -> None:
     assert payload["json_ld"]["@type"] == "Product"
 
 
+def test_storefront_events_drive_portfolio_metrics() -> None:
+    run = _seed_live_business()
+    client = TestClient(app)
+    session_id = "session-123456"
+
+    for event_type in ["view_product", "click_cta", "begin_checkout"]:
+        response = client.post(
+            f"/api/stores/{run.slug}/events",
+            json={
+                "event_type": event_type,
+                "session_id": session_id,
+                "source": "google",
+                "metadata": {"test": True},
+            },
+        )
+        assert response.status_code == 200
+
+    response = client.post(
+        f"/api/stores/{run.slug}/events",
+        json={
+            "event_type": "purchase_attempt",
+            "session_id": session_id,
+            "source": "google",
+            "value": 29.99,
+        },
+    )
+    assert response.status_code == 200
+
+    portfolio = client.get("/api/businesses").json()
+
+    assert portfolio["data_source"] == "events"
+    business = portfolio["businesses"][0]
+    assert business["metric_source"] == "events"
+    assert business["views_total"] == 1
+    assert business["views_24h"] == 1
+    assert business["revenue_total"] == 29.99
+    assert business["conversion_rate"] == 1.0
+    assert business["top_sources"][0]["source"] == "google"
+
+
 def test_lifecycle_shutdown_underperformers_marks_business(monkeypatch) -> None:
     run = _seed_live_business()
     monkeypatch.setenv("LIFECYCLE_GRACE_DAYS", "0")

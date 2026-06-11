@@ -1,4 +1,7 @@
-import type { CSSProperties } from "react";
+"use client";
+
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { trackStorefrontEvent, type StorefrontEventType } from "@/lib/api";
 import type { StoreConfig, StoreTheme } from "@/lib/mock-data";
 import styles from "./StoreTemplate.module.css";
 
@@ -33,7 +36,37 @@ function isRealImageUrl(url: string | undefined | null): boolean {
   return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:");
 }
 
+function sessionId(): string {
+  const key = "auto_ecommerce_store_session";
+  try {
+    const existing = window.localStorage.getItem(key);
+    if (existing) return existing;
+    const next = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    window.localStorage.setItem(key, next);
+    return next;
+  } catch {
+    return `${Date.now()}-${Math.random()}`;
+  }
+}
+
+function trafficSource(): string {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const utm = params.get("utm_source");
+    if (utm) return utm.slice(0, 80);
+    const referrer = document.referrer.toLowerCase();
+    for (const source of ["google", "tiktok", "instagram", "reddit", "email"]) {
+      if (referrer.includes(source)) return source;
+    }
+  } catch {
+    return "direct";
+  }
+  return "direct";
+}
+
 export function StoreTemplate({ store }: { store: StoreConfig }) {
+  const [email, setEmail] = useState("");
+  const [checkoutStatus, setCheckoutStatus] = useState("");
   const variants = store.variants ?? [];
   const features = store.features ?? [];
   const specs = store.specs ?? {};
@@ -42,6 +75,40 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
   const domain = store.store_url.replace(/^https?:\/\//, "");
   const accent = store.theme?.primary ?? "#0f766e";
   const showRealHero = isRealImageUrl(store.hero_image_url);
+  const sid = useMemo(() => (typeof window === "undefined" ? "" : sessionId()), []);
+
+  const track = (eventType: StorefrontEventType, metadata: Record<string, unknown> = {}) => {
+    if (!sid) return;
+    void trackStorefrontEvent(store.slug, {
+      event_type: eventType,
+      session_id: sid,
+      source: trafficSource(),
+      value: eventType === "purchase_attempt" ? store.price : 0,
+      metadata: {
+        product_name: store.product_name,
+        price: store.price,
+        ...metadata,
+      },
+    }).catch(() => {
+      // Analytics should never block a public storefront interaction.
+    });
+  };
+
+  useEffect(() => {
+    track("view_product", { path: window.location.pathname });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.slug]);
+
+  function handleCtaClick(location: string) {
+    track("click_cta", { location });
+  }
+
+  function handleCheckoutSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    track("email_capture", { email_domain: email.split("@")[1] ?? "" });
+    track("purchase_attempt", { location: "checkout", has_email: Boolean(email) });
+    setCheckoutStatus("Saved. We'll send availability and checkout details.");
+  }
 
   return (
     <main
@@ -52,7 +119,7 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
       <nav className={styles.topbar}>
         <span className={styles.brand}>{store.product_name}</span>
         <span className={styles.domain}>{domain}</span>
-        <a href="#checkout" className={styles.navCta}>
+        <a href="#checkout" className={styles.navCta} onClick={() => handleCtaClick("nav")}>
           {store.cta_text}
         </a>
       </nav>
@@ -65,7 +132,7 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
           <p className={styles.description}>{store.description}</p>
           <div className={styles.purchaseRow}>
             <span className={styles.price}>${store.price.toFixed(2)}</span>
-            <a className={styles.cta} href="#checkout">
+            <a className={styles.cta} href="#checkout" onClick={() => handleCtaClick("hero")}>
               {store.cta_text}
             </a>
           </div>
@@ -117,7 +184,12 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
                 <p className={styles.variantBlurb}>{v.blurb}</p>
                 <div className={styles.variantFoot}>
                   <span className={styles.variantPrice}>${v.price.toFixed(2)}</span>
-                  <a href="#checkout" className={styles.variantCta} style={{ background: v.accent || accent }}>
+                  <a
+                    href="#checkout"
+                    className={styles.variantCta}
+                    style={{ background: v.accent || accent }}
+                    onClick={() => handleCtaClick(`variant:${v.name}`)}
+                  >
                     Add to cart
                   </a>
                 </div>
@@ -172,7 +244,20 @@ export function StoreTemplate({ store }: { store: StoreConfig }) {
 
       <footer className={styles.footer} id="checkout">
         <h2>Ready to launch into your life?</h2>
-        <a className={styles.cta} href="#">{store.cta_text}</a>
+        <form className={styles.checkoutForm} onSubmit={handleCheckoutSubmit}>
+          <input
+            type="email"
+            required
+            value={email}
+            placeholder="you@example.com"
+            aria-label="Email address"
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <button className={styles.cta} type="submit">
+            {store.cta_text}
+          </button>
+        </form>
+        {checkoutStatus && <p className={styles.checkoutStatus}>{checkoutStatus}</p>}
         <p className={styles.legal}>
           {domain} · 30-day returns · Tracked shipping · Supplier: {store.supplier}
         </p>

@@ -1,15 +1,17 @@
 """Businesses portfolio API.
 
-Reads from the existing `launch_runs` storage (in-memory + ClickHouse) and
-augments each launched run with deterministic synthetic metrics until a real
-analytics pipeline is wired. All responses include `data_source: "synthetic"`
-so the UI can label the numbers honestly.
+Reads from the existing `launch_runs` storage (in-memory + ClickHouse), merges
+storefront analytics events when present, and falls back to deterministic
+synthetic metrics for stores that have not received traffic yet. Responses
+include a `data_source` value so the UI can label the numbers honestly.
 """
 
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+import json
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -82,7 +84,7 @@ def _business_from_run(run: LaunchRun) -> dict[str, Any]:
         delta = end - launched_at
         days_live = round(delta.total_seconds() / 86400.0, 2)
 
-    metrics = _mock_metrics(run.slug or str(run.run_id))
+    metrics = _metrics_for_run(run)
 
     return {
         "run_id": str(run.run_id),
@@ -123,6 +125,95 @@ def _portfolio_runs() -> list[LaunchRun]:
     return [r for r in runs if _is_launched(r)]
 
 
+def _event_metadata(event: dict[str, Any]) -> dict[str, Any]:
+    raw = event.get("metadata") or {}
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _event_timestamp(event: dict[str, Any]) -> datetime:
+    ts = event.get("timestamp")
+    if isinstance(ts, datetime):
+        return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+    if isinstance(ts, str) and ts:
+        try:
+            parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _source_for_event(event: dict[str, Any]) -> str:
+    source = str(event.get("source") or "").strip()
+    if source:
+        return source[:80]
+    metadata = _event_metadata(event)
+    referrer = str(metadata.get("referrer") or "").lower()
+    for candidate in _SOURCE_POOL:
+        if candidate in referrer:
+            return candidate
+    return "direct"
+
+
+def _event_metrics(run: LaunchRun) -> dict[str, Any] | None:
+    events = run_store.list_storefront_events(slug=run.slug, limit=10000)
+    if not events:
+        return None
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=24)
+    by_type = Counter(str(event.get("event_type") or "") for event in events)
+    recent = [event for event in events if _event_timestamp(event) >= cutoff]
+    recent_by_type = Counter(str(event.get("event_type") or "") for event in recent)
+
+    views_total = int(by_type["view_product"])
+    views_24h = int(recent_by_type["view_product"])
+    purchase_events = [event for event in events if event.get("event_type") == "purchase_attempt"]
+    recent_purchase_events = [
+        event for event in recent if event.get("event_type") == "purchase_attempt"
+    ]
+    revenue_total = round(sum(float(event.get("value") or 0.0) for event in purchase_events), 2)
+    revenue_24h = round(sum(float(event.get("value") or 0.0) for event in recent_purchase_events), 2)
+    checkout_total = int(by_type["begin_checkout"])
+    purchase_total = len(purchase_events)
+    conversion_numerator = purchase_total if purchase_total else checkout_total
+    conversion_rate = round(conversion_numerator / views_total, 4) if views_total else 0.0
+    engaged = int(by_type["click_cta"]) + checkout_total + int(by_type["email_capture"]) + purchase_total
+    bounce_rate = round(max(0.0, 1.0 - (engaged / views_total)), 4) if views_total else 0.0
+
+    sources = Counter(_source_for_event(event) for event in events)
+    total_sources = sum(sources.values()) or 1
+    top_sources = [
+        {"source": source, "share": round(count / total_sources, 3)}
+        for source, count in sources.most_common(3)
+    ]
+
+    return {
+        "views_total": views_total,
+        "views_24h": views_24h,
+        "revenue_total": revenue_total,
+        "revenue_24h": revenue_24h,
+        "conversion_rate": conversion_rate,
+        "bounce_rate": bounce_rate,
+        "top_sources": top_sources,
+        "metric_source": "events",
+    }
+
+
+def _metrics_for_run(run: LaunchRun) -> dict[str, Any]:
+    real = _event_metrics(run)
+    if real is not None:
+        return real
+    metrics = _mock_metrics(run.slug or str(run.run_id))
+    return {**metrics, "metric_source": "synthetic"}
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -150,9 +241,17 @@ async def list_businesses(status: str | None = None, sort: str = "launched_at") 
     }.get(sort, lambda b: b["launched_at"] or "")
     businesses.sort(key=key_fn, reverse=reverse)
 
+    metric_sources = {b["metric_source"] for b in businesses}
+    if not businesses or metric_sources == {"synthetic"}:
+        data_source = "synthetic"
+    elif metric_sources == {"events"}:
+        data_source = "events"
+    else:
+        data_source = "mixed"
+
     summary = _summary(_portfolio_runs())
     return {
-        "data_source": "synthetic",
+        "data_source": data_source,
         "summary": summary,
         "businesses": businesses,
     }
@@ -246,8 +345,9 @@ def build_backlog(limit: int = 10) -> dict[str, Any]:
 def _summary(runs: list[LaunchRun]) -> dict[str, Any]:
     live = [r for r in runs if r.business_status == "live"]
     settings = get_settings()
-    live_revenue = sum(_mock_metrics(r.slug or "")["revenue_total"] for r in live)
-    live_views_24h = sum(_mock_metrics(r.slug or "")["views_24h"] for r in live)
+    live_metrics = [_metrics_for_run(r) for r in live]
+    live_revenue = sum(float(m["revenue_total"]) for m in live_metrics)
+    live_views_24h = sum(int(m["views_24h"]) for m in live_metrics)
 
     # Hit rate: across ALL runs (incl. rejected/non-launched), how many cleared.
     all_runs = run_store.list_runs_with_stores() or runs

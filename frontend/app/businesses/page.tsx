@@ -46,6 +46,12 @@ function fmtPct(n: number): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+function metricsLabel(source: BusinessesResponse["data_source"] | undefined): string {
+  if (source === "events") return "event metrics";
+  if (source === "mixed") return "mixed metrics";
+  return "synthetic metrics";
+}
+
 function displayStatus(b: Business): "live" | "shutdown" | "archived" {
   if (b.business_status === "live") return "live";
   if (b.business_status === "shutdown") return "shutdown";
@@ -155,7 +161,9 @@ export default function BusinessesPage() {
             </span>
           )}
         </div>
-        <span className={styles.synthetic}>⚠ synthetic metrics</span>
+        <span className={styles.synthetic} data-source={data?.data_source ?? "synthetic"}>
+          {metricsLabel(data?.data_source)}
+        </span>
       </header>
 
       {summary && (
@@ -170,12 +178,12 @@ export default function BusinessesPage() {
           <div className={styles.statCard}>
             <span className={styles.statLabel}>TOTAL REVENUE</span>
             <span className={styles.statValue}>{fmtMoney(summary.total_revenue)}</span>
-            <span className={styles.statSub}>synthetic · all-time</span>
+            <span className={styles.statSub}>{metricsLabel(data?.data_source)} · all-time</span>
           </div>
           <div className={styles.statCard}>
             <span className={styles.statLabel}>VIEWS / 24H</span>
             <span className={styles.statValue}>{fmtNum(summary.total_views_24h)}</span>
-            <span className={styles.statSub}>synthetic</span>
+            <span className={styles.statSub}>{metricsLabel(data?.data_source)}</span>
           </div>
           <div className={styles.statCard}>
             <span className={styles.statLabel}>HIT RATE</span>
@@ -245,6 +253,7 @@ export default function BusinessesPage() {
                     <th>VIEWS/24H</th>
                     <th>REV/24H</th>
                     <th>TOP SRC</th>
+                    <th>METRICS</th>
                     <th>ATTEMPT</th>
                     <th>ACTION</th>
                   </tr>
@@ -252,7 +261,7 @@ export default function BusinessesPage() {
                 <tbody>
                   {visibleBusinesses.length === 0 && (
                     <tr>
-                      <td colSpan={10} className={styles.emptyRow}>
+                      <td colSpan={11} className={styles.emptyRow}>
                         no businesses match this filter
                       </td>
                     </tr>
@@ -286,6 +295,11 @@ export default function BusinessesPage() {
                         <td className={styles.numericCell}>{fmtMoney(b.revenue_24h)}</td>
                         <td className={styles.numericCell}>
                           {topSrc ? `${topSrc.source} ${(topSrc.share * 100).toFixed(0)}%` : "—"}
+                        </td>
+                        <td className={styles.numericCell}>
+                          <span className={styles.metricBadge} data-source={b.metric_source}>
+                            {b.metric_source}
+                          </span>
                         </td>
                         <td className={styles.numericCell}>
                           {b.attempt_index ?? 1}

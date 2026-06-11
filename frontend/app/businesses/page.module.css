@@ -59,6 +59,14 @@
   font-weight: 600;
 }
 
+.synthetic[data-source="events"] {
+  color: var(--accent);
+}
+
+.synthetic[data-source="mixed"] {
+  color: var(--accent-2);
+}
+
 /* ---------- Stat cards row ---------- */
 
 .statGrid {
@@ -221,6 +229,28 @@
 .statusPill[data-status="archived"] {
   background: color-mix(in srgb, var(--text-dim) 25%, transparent);
   color: var(--text-dim);
+}
+
+.metricBadge {
+  display: inline-flex;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.metricBadge[data-source="events"] {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--accent);
+}
+
+.metricBadge[data-source="synthetic"] {
+  border-color: color-mix(in srgb, var(--accent-2) 35%, var(--border));
+  color: var(--accent-2);
 }
 
 .productCell {
