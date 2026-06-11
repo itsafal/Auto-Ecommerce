@@ -61,6 +61,13 @@ def _mock_metrics(slug: str) -> dict[str, Any]:
         "conversion_rate": conversion_rate,
         "bounce_rate": bounce_rate,
         "top_sources": top_sources,
+        "funnel": _funnel(
+            views=views_total,
+            cta_clicks=max(1, int(views_total * (0.08 + (_seed(slug, "cta") % 12) / 100.0))),
+            checkouts=max(1, int(views_total * conversion_rate * 1.8)),
+            email_captures=max(1, int(views_total * conversion_rate * 1.2)),
+            purchase_attempts=max(1, int(views_total * conversion_rate)),
+        ),
     }
 
 
@@ -161,6 +168,31 @@ def _source_for_event(event: dict[str, Any]) -> str:
     return "direct"
 
 
+def _rate(numerator: int, denominator: int) -> float:
+    return round(numerator / denominator, 4) if denominator else 0.0
+
+
+def _funnel(
+    *,
+    views: int,
+    cta_clicks: int,
+    checkouts: int,
+    email_captures: int,
+    purchase_attempts: int,
+) -> dict[str, Any]:
+    return {
+        "views": views,
+        "cta_clicks": cta_clicks,
+        "checkouts": checkouts,
+        "email_captures": email_captures,
+        "purchase_attempts": purchase_attempts,
+        "cta_rate": _rate(cta_clicks, views),
+        "checkout_rate": _rate(checkouts, views),
+        "capture_rate": _rate(email_captures, views),
+        "purchase_rate": _rate(purchase_attempts, views),
+    }
+
+
 def _event_metrics(run: LaunchRun) -> dict[str, Any] | None:
     events = run_store.list_storefront_events(slug=run.slug, limit=10000)
     if not events:
@@ -174,6 +206,8 @@ def _event_metrics(run: LaunchRun) -> dict[str, Any] | None:
 
     views_total = int(by_type["view_product"])
     views_24h = int(recent_by_type["view_product"])
+    cta_clicks = int(by_type["click_cta"])
+    email_captures = int(by_type["email_capture"])
     purchase_events = [event for event in events if event.get("event_type") == "purchase_attempt"]
     recent_purchase_events = [
         event for event in recent if event.get("event_type") == "purchase_attempt"
@@ -202,6 +236,13 @@ def _event_metrics(run: LaunchRun) -> dict[str, Any] | None:
         "conversion_rate": conversion_rate,
         "bounce_rate": bounce_rate,
         "top_sources": top_sources,
+        "funnel": _funnel(
+            views=views_total,
+            cta_clicks=cta_clicks,
+            checkouts=checkout_total,
+            email_captures=email_captures,
+            purchase_attempts=purchase_total,
+        ),
         "metric_source": "events",
     }
 

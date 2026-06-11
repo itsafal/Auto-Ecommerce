@@ -45,6 +45,18 @@ export type BatchStatusResponse = {
 
 export type TopSource = { source: string; share: number };
 
+export type FunnelMetrics = {
+  views: number;
+  cta_clicks: number;
+  checkouts: number;
+  email_captures: number;
+  purchase_attempts: number;
+  cta_rate: number;
+  checkout_rate: number;
+  capture_rate: number;
+  purchase_rate: number;
+};
+
 export type Business = {
   run_id: string;
   batch_id: string | null;
@@ -68,6 +80,7 @@ export type Business = {
   conversion_rate: number;
   bounce_rate: number;
   top_sources: TopSource[];
+  funnel: FunnelMetrics;
   metric_source: "synthetic" | "events";
 };
 
